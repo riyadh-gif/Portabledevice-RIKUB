@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jaga Padi - Maps</title>
+    <link rel="stylesheet" href="../styles/common.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .header {
+        background: white;
+        height: 55px;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .back-button {
+        width: 130px;
+        height: 35px;
+        background-color: #567666;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+
+      .back-button:hover {
+        background-color: #6b9080;
+      }
+
+      .title-content {
+        flex: 1;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .title-icon {
+        font-size: 18px;
+      }
+
+      .title-text {
+        color: #567666;
+        font-size: 16px;
+        font-weight: bold;
+        letter-spacing: 1px;
+      }
+
+      .spacer {
+        width: 130px;
+      }
+
+      #map-frame {
+        width: 100%;
+        height: calc(100vh - 55px);
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <button class="back-button" onclick="window.location.href='menu.html'">
+        ← Back to Menu
+      </button>
+      <div class="title-content">
+        <span class="title-icon">🗺️</span>
+        <span class="title-text">SmartGIS - JagaPadi</span>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
+    <iframe id="map-frame" src="test.html"></iframe>
+  </body>
+</html>

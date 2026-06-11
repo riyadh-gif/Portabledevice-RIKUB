@@ -37,11 +37,14 @@ def index():
 
 @app.route("/<path:filename>")
 def web_files(filename):
-    """Serve web/ pages and assets (styles, scripts, vendor)."""
+    """Serve built SPA assets; fall back to index.html for client routes."""
     full = os.path.join(WEB_DIR, filename)
-    if not os.path.isfile(full):
-        abort(404)
-    return send_from_directory(WEB_DIR, filename)
+    if os.path.isfile(full):
+        return send_from_directory(WEB_DIR, filename)
+    # SPA history fallback: route-like paths (no file extension) -> index.html.
+    if "." not in os.path.basename(filename):
+        return send_from_directory(WEB_DIR, "index.html")
+    abort(404)
 
 
 @app.route("/data/<path:filename>")

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jaga Padi - Menu</title>
+  <link rel="stylesheet" href="/styles/menu.css">
+  <link rel="stylesheet" href="/styles/transitions.css">
+</head>
+<body>
+  <div class="menu-container">
+    <div class="header">
+      <div class="logo">🌾</div>
+      <h1 class="title">Jaga Padi</h1>
+      <p class="subtitle">Smart Rice Field Monitoring System</p>
+      <p class="tagline">Teknologi AI untuk Pertanian Modern</p>
+    </div>
+
+    <div class="cards-container">
+      <div class="card">
+        <div class="card-content">
+          <div class="card-icon"><img src="/data/icon/maps.png" alt="Maps Icon"></div>
+          <h2 class="card-title">SmartGIS</h2>
+          <h3 class="card-subtitle">Peta Interaktif</h3>
+          <p class="card-description">Monitoring sawah dengan teknologi GIS dan overlay peta real-time</p>
+          <button class="card-button" onclick="navigateTo('/maps.html')">Buka Fitur →</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-content">
+          <div class="card-icon">💬</div>
+          <h2 class="card-title">Chatbot AI</h2>
+          <h3 class="card-subtitle">Asisten Cerdas</h3>
+          <p class="card-description">Konsultasi pertanian dengan AI assistant untuk solusi cepat dan akurat</p>
+          <button class="card-button" onclick="navigateTo('/chatbot.html')">Buka Fitur →</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-content">
+          <div class="card-icon"><img src="/data/icon/deteksi.jpeg" alt="Detection Icon"></div>
+          <h2 class="card-title">Deteksi Hama</h2>
+          <h3 class="card-subtitle">Classifier Disease Paddy</h3>
+          <p class="card-description">Identifikasi penyakit tanaman dengan machine learning dan computer vision</p>
+          <button class="card-button" onclick="navigateTo('/detection.html')">Buka Fitur →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Version 1.0.0 RIKUB Kemdintisaintek 2025</p>
+    </div>
+  </div>
+
+  <script>
+    function navigateTo(page) { window.location.href = page; }
+  </script>
+</body>
+</html>

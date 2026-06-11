@@ -39,3 +39,9 @@ data/layer/*.tiff
 
 # Graphify code graph (regenerable: graphify update .)
 graphify-out/
+
+# Python venv (pywebview build)
+.venv/
+
+# Pre-baked map tiles (regenerable: tools/prebake_tiles.sh)
+data/tiles/

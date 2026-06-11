@@ -34,22 +34,31 @@ graphify path "menu.html" "detectDisease"
 
 ## Architecture
 
-- Entry: `package.json` main = `src/main/index.js` (BrowserWindow 1280x720, contextIsolation on, preload).
-  NOTE: root `main.js` + `index.html` are a stale duplicate entry — do not use.
-- Flow: `splash.html` -> `menu.html` -> {`maps.html`, `chatbot.html`, `detection.html`}.
-  Multi-page nav via `window.location.href` (not SPA).
-- `maps.html` — Leaflet offline tiles (`data/MapsJemberNew2/`) + GeoTIFF overlays (`data/layer/*.tif`).
-- `scripts/api-client.js` — fetch wrapper to Python services; `config/api-config.js` holds endpoints.
+ACTIVE shell = **pywebview** (Pi 5 target). Electron tree under `src/` + root
+`main.js`/`index.html` is LEGACY — kept for reference, not the run path. See `README-pi.md`.
+
+- Entry: `app.py` — pywebview window + Flask. Serves `web/` (frontend), `data/`, `tiles/`.
+  Run: `py app.py` (dev) / `python3 app.py --fullscreen` (Pi kiosk).
+- Frontend: `web/` — vanilla HTML/CSS/JS, root-absolute paths (`/styles`, `/scripts`, `/data`).
+  Flow: `index.html` (splash) -> `menu.html` -> {`maps.html`, `chatbot.html`, `detection.html`}.
+- `web/scripts/maps.js` — Leaflet + **pre-baked XYZ overlay tiles** (`/tiles/<id>/{z}/{x}/{y}.png`).
+  GeoTIFF parsing removed (was the Jetson perf killer); bake via `tools/prebake_tiles.sh`.
+- `web/scripts/api-client.js` — fetch wrapper to Python AI services (chatbot :5000, detection :5001).
+- `web/styles/transitions.css` — compositor-friendly animations (interactivity layer).
+- `web/vendor/leaflet/` — Leaflet + MarkerCluster, offline (refetch: `tools/fetch_vendor.sh`).
 - Color tokens: `warna.md` (green palette, primary `#567666`).
 
-## Known issues (fix before new features)
+## Fixed during pywebview migration
 
-1. `package.json` dependencies list is wrong — full of transitive deps; only `electron` is real.
-2. `src/renderer/scripts/detection.js` — `detectDisease()` calls itself (name shadows api-client's
-   `detectDisease`); recursion bug, never hits the API.
-3. Missing data dirs referenced by `maps.html`: `data/leaflet/`, `data/MapsJemberNew2/`, `data/layer/`,
-   and `styles/common.css` — maps will not render without them.
-4. `maps.html` CSS typo: `height: 50 px` (line ~144).
+- detection recursion/shadowing bug → handlers renamed `runDetection()` / `runAnalyze()`,
+  API fns `detectDiseaseApi()` / `analyzeParametersApi()`.
+- dropped dead `styles/common.css` ref; fixed `height: 50 px` typo.
+
+## Still open
+
+1. `package.json` dependencies list is wrong (transitive deps); irrelevant to pywebview build but clean up.
+2. Required assets NOT in repo (must copy from source): `data/MapsJemberNew2/` (base tiles),
+   `data/layer/*.tif` (overlay source), `data/icon/*`. See README-pi.md asset table.
 
 ## Conventions
 

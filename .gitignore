@@ -36,3 +36,6 @@ data/layer/*.tiff
 # Temporary files
 *.tmp
 *.log
+
+# Graphify code graph (regenerable: graphify update .)
+graphify-out/

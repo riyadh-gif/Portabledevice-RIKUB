@@ -11,6 +11,7 @@ SmartGIS, Chatbot AI, dan Deteksi Penyakit Padi.
 | UI | lucide-react, class-variance-authority, shadcn-style components |
 | Peta | Leaflet, Leaflet MarkerCluster |
 | Backend | FastAPI di `server/` |
+| Database | PostgreSQL |
 | Database layer | SQLAlchemy |
 | Package manager FE | Bun |
 
@@ -90,6 +91,23 @@ SQLAlchemy
 
 Package transitif seperti `starlette`, `pydantic`, `greenlet`, dan lainnya akan
 dipasang otomatis oleh `pip`.
+
+## Database
+
+Target database project ini adalah PostgreSQL, dengan SQLAlchemy sebagai ORM
+agar query tidak ditulis sebagai raw SQL langsung.
+
+Konfigurasi koneksi database nantinya sebaiknya dibaca dari environment
+variable, misalnya:
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/jaga_padi
+```
+
+Untuk saat ini struktur model, session, dan migration belum dibuat di
+`server/`. Saat fitur database mulai dikerjakan, dependency driver PostgreSQL
+seperti `psycopg` atau `asyncpg` bisa ditambahkan ke
+`server/requirements.txt` sesuai pola koneksi yang dipilih.
 
 ## Integrasi AI
 

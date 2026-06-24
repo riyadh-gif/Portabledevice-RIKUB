@@ -12,7 +12,7 @@ const ACCENTS = {
 const CARDS = [
   {
     to: '/maps', featured: true, accent: 'forest', Icon: MapPinned, tag: 'Monitoring GIS',
-    cover: '/data/cover/gis.jpg', objPos: '50% 42%', title: 'SmartGIS', subtitle: 'Peta Interaktif', online: true,
+    cover: '/data/cover/gis_new.png', objPos: '50% 42%', title: 'SmartGIS', subtitle: 'Peta Interaktif', online: true,
     desc: 'Pantau sawah dengan overlay GIS & citra real-time. Telusuri koordinat, layer lahan, dan titik foto lapangan.',
     stats: [{ Icon: Layers, label: '5 layer' }, { Icon: ImageIcon, label: '12 titik foto' }],
   },
@@ -34,16 +34,73 @@ function FeatureCard({ card }) {
   const navigate = useNavigate();
   const a = ACCENTS[card.accent];
   const { Icon } = card;
+
+  // --- DESAIN KHUSUS SMARTGIS (Featured) ---
+  if (card.featured) {
+    return (
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={() => navigate(card.to)}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate(card.to)}
+        className={`group relative flex cursor-pointer flex-col overflow-hidden border-t-[3px] ${a.top} p-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] row-span-2`}
+      >
+        <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+          <img src={card.cover} alt={card.title} loading="eager" decoding="async"
+            style={{ objectPosition: card.objPos || 'center' }}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
+          <Badge variant="outline" className="absolute right-4 top-4 border-transparent px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] backdrop-blur-md shadow-sm bg-slate-900/85 text-white">
+            {card.tag}
+          </Badge>
+          <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest shadow-sm backdrop-blur-md text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {card.online ? 'online' : 'offline'}
+          </span>
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-2 p-4">
+          <div className="flex items-start gap-3">
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl shadow-sm ring-1 ring-inset ${a.chip}`}>
+              <Icon className="h-5 w-5" strokeWidth={2} />
+            </span>
+            <div className="flex flex-col mt-0.5">
+              <p className={`text-[10px] font-bold uppercase tracking-[0.2em] leading-none mb-1 ${a.text}`}>{card.subtitle}</p>
+              <h2 className="font-black tracking-tight text-slate-900 text-2xl leading-none">{card.title}</h2>
+            </div>
+          </div>
+          
+          <p className="text-slate-500 font-medium text-[14px] leading-snug mt-1 max-w-[95%]">
+            {card.desc}
+          </p>
+
+          <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3 mt-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
+              {card.stats.map((s, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 tracking-wide">
+                  <s.Icon className="h-3.5 w-3.5 text-slate-400" /> {s.label}
+                </span>
+              ))}
+            </div>
+            <span className={`group/btn inline-flex items-center gap-1.5 text-[13px] font-bold transition-colors ${a.text}`}>
+              Buka <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover/btn:translate-x-1" />
+            </span>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // --- DESAIN NORMAL (Chatbot, Deteksi, persis seperti aslinya) ---
   return (
     <Card
       role="button"
       tabIndex={0}
       onClick={() => navigate(card.to)}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate(card.to)}
-      className={`group relative flex cursor-pointer flex-col overflow-hidden border-t-[3px] ${a.top} p-0 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${card.featured ? 'row-span-2' : ''}`}
+      className={`group relative flex cursor-pointer flex-col overflow-hidden border-t-[3px] ${a.top} p-0 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]`}
     >
       <div className="relative min-h-0 w-full flex-1 overflow-hidden">
-        <img src={card.cover} alt={card.title} loading={card.featured ? 'eager' : 'lazy'} decoding="async"
+        <img src={card.cover} alt={card.title} loading="lazy" decoding="async"
           style={{ objectPosition: card.objPos || 'center' }}
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]" />
         <Badge variant="outline" className="absolute right-3 top-3 border-transparent bg-white/90 uppercase tracking-wide backdrop-blur-sm">{card.tag}</Badge>
@@ -57,11 +114,11 @@ function FeatureCard({ card }) {
         <div className="flex items-center gap-2">
           <span className={`grid h-9 w-9 place-items-center rounded-xl ${a.chip}`}><Icon className="h-5 w-5" strokeWidth={1.9} /></span>
           <div>
-            <h2 className={`font-bold leading-none text-forest ${card.featured ? 'text-3xl' : 'text-xl'}`}>{card.title}</h2>
+            <h2 className="font-bold leading-none text-forest text-xl">{card.title}</h2>
             <p className={`mt-1 text-sm font-semibold ${a.text}`}>{card.subtitle}</p>
           </div>
         </div>
-        <p className={`text-muted-foreground ${card.featured ? 'text-[15px] leading-relaxed' : 'line-clamp-2 text-sm leading-snug'}`}>{card.desc}</p>
+        <p className="text-muted-foreground line-clamp-2 text-sm leading-snug">{card.desc}</p>
 
         <div className="mt-auto flex items-center justify-between border-t border-border/70 pt-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-muted-foreground">

@@ -41,13 +41,28 @@ function loadingContent() {
   </div>`;
 }
 
-function popupContent({ address, lat, lng }) {
+function popupContent({ address, lat, lng, title, detectedAt }) {
   return `<div class="px-5 pt-5 pb-1 font-sans min-w-[320px] relative bg-white rounded-2xl">
     <button type="button" class="jp-location-close absolute right-5 top-5 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700" aria-label="Tutup popup">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
     </button>
+    ${title ? `<div class="mb-4 pr-6">
+      <div class="flex items-center gap-1 text-[#4B7C63] font-extrabold uppercase tracking-[0.14em] text-[9px]">
+        Lahan
+      </div>
+      <p class="text-[16px] font-black text-gray-950 leading-tight m-0" style="margin-top:4px">${escapeHtml(title)}</p>
+    </div>
+    <div class="h-[1px] w-full bg-gray-200 mb-3"></div>` : ''}
+    ${detectedAt ? `<div class="mb-4 pr-6">
+      <div class="flex items-center gap-1 text-[#4B7C63] font-bold uppercase tracking-widest text-[9px]">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+        Capture at
+      </div>
+      <p class="text-[12px] font-bold text-gray-900 leading-[1.4] m-0" style="margin-top:3px">${escapeHtml(detectedAt)}</p>
+    </div>
+    <div class="h-[1px] w-full bg-gray-200 mb-3"></div>` : ''}
     <div class="mb-4 pr-6">
       <div class="flex items-center gap-1 text-[#4B7C63] font-bold uppercase tracking-widest text-[9px]">
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -90,7 +105,7 @@ function attachCloseHandler(marker, onClose) {
   };
 }
 
-export function createLocationMarker({ lat, lng, onClose }) {
+export function createLocationMarker({ lat, lng, onClose, title, detectedAt, address }) {
   const marker = L.marker([lat, lng], { icon: LOCATION_MARKER_ICON });
   marker.bindPopup(loadingContent(), {
     closeButton: false,
@@ -102,18 +117,23 @@ export function createLocationMarker({ lat, lng, onClose }) {
   marker.on('popupopen', () => attachCloseHandler(marker, onClose));
   marker.on('popupclose', () => onClose?.());
 
+  if (address) {
+    marker.getPopup()?.setContent(popupContent({ address, lat, lng, title, detectedAt }));
+    return marker;
+  }
+
   fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
     .then((res) => res.json())
     .then((data) => {
       const address = data?.display_name || 'Tidak ada data lokasi di titik ini.';
-      marker.getPopup()?.setContent(popupContent({ address, lat, lng }));
+      marker.getPopup()?.setContent(popupContent({ address, lat, lng, title, detectedAt }));
       requestAnimationFrame(() => {
         marker.getPopup()?.update();
         attachCloseHandler(marker, onClose);
       });
     })
     .catch(() => {
-      marker.getPopup()?.setContent(popupContent({ address: 'Gagal memuat alamat.', lat, lng }));
+      marker.getPopup()?.setContent(popupContent({ address: 'Gagal memuat alamat.', lat, lng, title, detectedAt }));
       requestAnimationFrame(() => {
         marker.getPopup()?.update();
         attachCloseHandler(marker, onClose);

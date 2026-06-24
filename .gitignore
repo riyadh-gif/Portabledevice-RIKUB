@@ -1,47 +1,7 @@
-# Python
+server/.env
+server/venv/
+server/storage/
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# Virtual Environment
-venv/
-env/
-ENV/
-
-# Node.js
-node_modules/
-package-lock.json
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Data files - Large files only
-data/MapsJemberNew2/
-data/layer/*.tif
-data/layer/*.tiff
-
-# Temporary files
-*.tmp
-*.log
-
-# Graphify code graph (regenerable: graphify update .)
-graphify-out/
-
-# Python venv (pywebview build)
-.venv/
-
-# Pre-baked map tiles (regenerable: tools/prebake_tiles.sh)
-data/tiles/
+web/public/imagery/
+contoh-orthommosaic-drone/

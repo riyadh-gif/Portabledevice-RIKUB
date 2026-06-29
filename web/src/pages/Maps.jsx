@@ -16,11 +16,14 @@ import {
   LocateFixed,
   Loader2,
   MapPin,
+  Drone,
   X,
   Minus,
   Plus,
   Sprout,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   SlidersHorizontal,
   Info,
   Trash2,
@@ -204,6 +207,10 @@ export function Maps() {
   const [sprayTargetsError, setSprayTargetsError] = useState("");
   const [sprayTargetFeatures, setSprayTargetFeatures] = useState([]);
   const [activeAnalysisPanel, setActiveAnalysisPanel] = useState("ndvi-zones");
+  const [routeAltitude, setRouteAltitude] = useState(5);
+  const [routeSpeed, setRouteSpeed] = useState(2);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [telemetryCollapsed, setTelemetryCollapsed] = useState(false);
 
   function ensureBaseLayer(id) {
     if (baseLayers.current[id]) return baseLayers.current[id];
@@ -569,7 +576,7 @@ export function Maps() {
     if (!isActive) {
       setActiveAnalysisPanel(id);
     } else if (activeAnalysisPanel === id) {
-      const fallback = ["ndvi-zones", "spray-targets"].find(
+      const fallback = ["ndvi-zones", "spray-targets", "spraying-route"].find(
         (layerId) => layerId !== id && active.has(layerId),
       );
       if (fallback) setActiveAnalysisPanel(fallback);
@@ -675,7 +682,7 @@ export function Maps() {
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
           ${zoneId ? `<span class="rounded-full bg-emerald-900 px-3 py-1.5 text-[13px] font-black leading-none text-white shadow-[0_4px_10px_rgba(6,78,59,0.22)]">${zoneId}</span>` : ""}
-          <button type="button" class="jp-zone-close flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700" aria-label="Tutup popup">
+          <button type="button" class="jp-zone-close flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-emerald-200/55 transition-colors hover:bg-slate-200 hover:text-slate-700" aria-label="Tutup popup">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -713,7 +720,7 @@ export function Maps() {
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
           ${zoneId ? `<span class="rounded-full bg-emerald-900 px-3 py-1.5 text-[13px] font-black leading-none text-white shadow-[0_4px_10px_rgba(6,78,59,0.22)]">${zoneId}</span>` : ""}
-          <button type="button" class="jp-zone-close flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700" aria-label="Tutup popup">
+          <button type="button" class="jp-zone-close flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-emerald-200/55 transition-colors hover:bg-slate-200 hover:text-slate-700" aria-label="Tutup popup">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -1543,10 +1550,20 @@ export function Maps() {
     : "-";
   const ndviRangeMinPercent = ((ndviZoneSettings.ndvi_min + 1) / 2) * 100;
   const ndviRangeMaxPercent = ((ndviZoneSettings.ndvi_max + 1) / 2) * 100;
-  const shouldFillFieldPanel = ndviZoneFeatures.length > 0;
+  const routeActive = active.has("spraying-route");
+  const sprayTargetAreaM2 = sprayTargetFeatures.reduce(
+    (sum, feature) => sum + Number(feature.properties?.area_m2 || 0),
+    0,
+  );
+  const sprayReadyCount = sprayTargetFeatures.filter(
+    (feature) => feature.properties?.chamber !== "none",
+  ).length;
+  const routeWaypointCount = sprayTargetFeatures.length > 0 ? sprayTargetFeatures.length * 4 : 0;
+  const shouldFillFieldPanel = ndviZoneFeatures.length > 0 || routeActive;
   const activeLayerPanels = [
     { id: "ndvi-zones", label: "NDVI Zones" },
     { id: "spray-targets", label: "Spray Targets" },
+    { id: "spraying-route", label: "Spraying Route" },
   ].filter((panel) => active.has(panel.id));
 
   function renderAnalysisPanelSwitch() {
@@ -1565,7 +1582,7 @@ export function Maps() {
             }`}
             title={panel.label}
           >
-            {panel.id === "ndvi-zones" ? "Zones" : "Targets"}
+            {panel.id === "ndvi-zones" ? "Zones" : panel.id === "spray-targets" ? "Targets" : "Route"}
           </button>
         ))}
       </div>
@@ -1607,7 +1624,7 @@ export function Maps() {
         <div ref={mapDiv} className="absolute inset-0" />
 
         {/* Search */}
-        <div className="absolute left-4 right-4 top-4 z-[1000] sm:right-auto sm:w-[360px]">
+        <div className="absolute left-4 top-4 z-[1000] w-[min(320px,calc(100vw-32px))] md:w-[340px]">
           <form
             onSubmit={searchLocation}
             className={`flex h-[52px] items-center bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] focus-within:shadow-[0_8px_30px_rgba(0,0,0,0.16)] ${
@@ -1678,22 +1695,36 @@ export function Maps() {
           )}
         </div>
 
-        {/* Field selector */}
-        <div
-          className={`absolute left-4 right-10 top-[76px] z-[1000] sm:right-auto sm:w-[420px] ${shouldFillFieldPanel ? "bottom-4" : ""}`}
-        >
-          <div
-            className={`rounded-[18px] border border-white/70 bg-white p-3 shadow-[0_12px_34px_rgba(15,23,42,0.15)] ${
-              shouldFillFieldPanel
-                ? "flex h-full flex-col overflow-hidden"
-                : "max-h-[calc(100dvh-100px)] overflow-y-auto overscroll-contain"
-            }`}
+        {leftPanelCollapsed && (
+          <button
+            type="button"
+            onClick={() => setLeftPanelCollapsed(false)}
+            className="absolute left-4 top-[76px] z-[1000] flex h-11 items-center gap-2 rounded-2xl border border-white/70 bg-white px-3 text-sm font-black text-forest shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-colors hover:bg-emerald-50"
+            title="Buka panel SmartGIS"
           >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">
-                  Pilih Lahan
-                </div>
+            <ChevronRight className="h-4 w-4" />
+            Panel
+          </button>
+        )}
+
+        {!leftPanelCollapsed && (
+          <>
+            {/* Field selector */}
+            <div
+              className="absolute bottom-4 left-4 top-[76px] z-[1000] w-[min(380px,calc(100vw-32px))]"
+            >
+              <div
+                className={`rounded-[18px] border border-white/70 bg-white p-3 shadow-[0_12px_34px_rgba(15,23,42,0.15)] ${
+                  shouldFillFieldPanel
+                    ? "flex h-full flex-col overflow-hidden"
+                    : "max-h-full overflow-y-auto overscroll-contain"
+                }`}
+              >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+                    Pilih Lahan
+                  </div>
                 {fieldError && (
                   <div className="mt-0.5 truncate text-[10px] font-semibold text-red-500">
                     {fieldError}
@@ -1703,6 +1734,14 @@ export function Maps() {
               {fieldsLoading && (
                 <Loader2 className="h-4 w-4 animate-spin text-forest" />
               )}
+              <button
+                type="button"
+                onClick={() => setLeftPanelCollapsed(true)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                title="Sembunyikan panel SmartGIS"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
             </div>
 
             <div className="relative">
@@ -1770,7 +1809,7 @@ export function Maps() {
 
             {active.has("ndvi-zones") &&
               activeAnalysisPanel === "ndvi-zones" && (
-              <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-3">
+              <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain border-t border-gray-100 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-800 ring-1 ring-emerald-900/10">
@@ -2149,13 +2188,7 @@ export function Maps() {
                       Area
                     </div>
                     <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                      {formatNumber(
-                        sprayTargetFeatures.reduce(
-                          (sum, feature) =>
-                            sum + Number(feature.properties?.area_m2 || 0),
-                          0,
-                        ),
-                      )}
+                      {formatNumber(sprayTargetAreaM2)}
                     </div>
                   </div>
                   <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
@@ -2163,11 +2196,7 @@ export function Maps() {
                       Ready
                     </div>
                     <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                      {
-                        sprayTargetFeatures.filter(
-                          (feature) => feature.properties?.chamber !== "none",
-                        ).length
-                      }
+                      {sprayReadyCount}
                     </div>
                   </div>
                 </div>
@@ -2229,8 +2258,168 @@ export function Maps() {
                 )}
               </div>
             )}
+
+            {active.has("spraying-route") &&
+              activeAnalysisPanel === "spraying-route" && (
+              <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-black leading-tight text-gray-950">
+                      Misi Penyemprotan
+                    </div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-gray-500">
+                      Rute, waypoint, dan status drone
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {renderAnalysisPanelSwitch()}
+                    <button
+                      type="button"
+                      onClick={() => toggleAnalysisLayer("spraying-route")}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                      title="Tutup Spraying Route"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {sprayTargetFeatures.length === 0 ? (
+                  <div className="overflow-hidden rounded-2xl border border-dashed border-emerald-200 bg-gradient-to-br from-emerald-50 to-cream">
+                    <div className="px-4 pb-5 pt-4 text-center">
+                      <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-2xl bg-white text-forest shadow-sm ring-1 ring-emerald-100">
+                        <Layers className="h-5 w-5" />
+                      </div>
+                      <div className="text-[13px] font-black text-emerald-950">
+                        Belum ada target semprot
+                      </div>
+                      <p className="mx-auto mt-1 max-w-[310px] text-xs font-semibold leading-snug text-emerald-800">
+                        Aktifkan Spray Targets atau approve NDVI Zones terlebih dahulu sebelum membuat rute.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!active.has("spray-targets")) {
+                            toggleAnalysisLayer("spray-targets");
+                          } else {
+                            setActiveAnalysisPanel("spray-targets");
+                          }
+                        }}
+                        className="mt-4 inline-flex h-9 items-center justify-center rounded-xl bg-forest px-4 text-[11px] font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] transition-colors hover:bg-house"
+                      >
+                        Buka Spray Targets
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 border-t border-emerald-100 bg-white/70 text-center text-[9px] font-black uppercase tracking-[0.08em] text-emerald-800">
+                      <div className="px-2 py-2">Targets</div>
+                      <div className="border-x border-emerald-100 px-2 py-2">Route</div>
+                      <div className="px-2 py-2">Mission</div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
+                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-forest">
+                          Target
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
+                          {sprayTargetFeatures.length}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
+                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-forest">
+                          Waypoint
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
+                          {routeWaypointCount}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
+                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-emerald-700">
+                          Ready
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
+                          {sprayReadyCount}/{sprayTargetFeatures.length}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 rounded-xl border border-gray-200 bg-white p-2.5">
+                      <div className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
+                        Flight Settings
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block">
+                          <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
+                            Altitude
+                          </span>
+                          <div className="mt-0.5 flex h-9 items-center rounded-xl border border-gray-200 bg-gray-50 px-2 focus-within:border-forest">
+                            <input
+                              type="number"
+                              min="1"
+                              step="0.5"
+                              value={routeAltitude}
+                              onChange={(event) => setRouteAltitude(Math.max(1, Number(event.target.value) || 1))}
+                              className="min-w-0 flex-1 bg-transparent text-center text-[14px] font-black tabular-nums text-gray-900 outline-none"
+                            />
+                            <span className="text-[10px] font-bold text-gray-400">m</span>
+                          </div>
+                        </label>
+                        <label className="block">
+                          <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
+                            Speed
+                          </span>
+                          <div className="mt-0.5 flex h-9 items-center rounded-xl border border-gray-200 bg-gray-50 px-2 focus-within:border-forest">
+                            <input
+                              type="number"
+                              min="0.5"
+                              step="0.5"
+                              value={routeSpeed}
+                              onChange={(event) => setRouteSpeed(Math.max(0.5, Number(event.target.value) || 0.5))}
+                              className="min-w-0 flex-1 bg-transparent text-center text-[14px] font-black tabular-nums text-gray-900 outline-none"
+                            />
+                            <span className="text-[10px] font-bold text-gray-400">m/s</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid gap-2">
+                      <button
+                        type="button"
+                        className="flex h-10 items-center justify-center rounded-xl bg-forest px-4 text-[12px] font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] transition-colors hover:bg-house"
+                      >
+                        Generate Route
+                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled
+                          className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
+                          title="Belum terhubung ke backend drone"
+                        >
+                          Upload Mission
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
+                          title="Belum terhubung ke backend drone"
+                        >
+                          Execute
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+              </div>
+            )}
           </div>
-        </div>
+            </div>
+          </>
+        )}
 
         {/* NDVI Health Stats */}
         {active.has("ndvi") && (
@@ -2348,6 +2537,103 @@ export function Maps() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {routeActive && (
+          <div className="absolute bottom-6 left-4 right-20 z-[1000] flex justify-end lg:left-auto lg:max-w-[calc(100vw-8rem)]">
+            <div className="max-w-full rounded-2xl border border-white/15 bg-slate-950/76 px-3 py-1.5 text-white shadow-[0_14px_34px_rgba(15,23,42,0.32)] backdrop-blur-md">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400 ring-4 ring-slate-400/15" />
+                  <span className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-slate-100">
+                    Drone Offline
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {!telemetryCollapsed && (
+                    <span className="rounded-full bg-slate-700/80 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-100 ring-1 ring-white/10">
+                      Mission Idle
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTelemetryCollapsed((collapsed) => !collapsed)}
+                    className="grid h-6 w-6 place-items-center rounded-full bg-white/10 text-slate-100 ring-1 ring-white/10 transition hover:bg-white/20"
+                    aria-label={telemetryCollapsed ? "Expand telemetry" : "Collapse telemetry"}
+                    title={telemetryCollapsed ? "Expand telemetry" : "Collapse telemetry"}
+                  >
+                    {telemetryCollapsed ? (
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              {!telemetryCollapsed && (
+                <div className="mt-1.5 grid max-h-[34dvh] gap-1.5 overflow-y-auto overscroll-contain pr-1 text-[10px] font-bold tabular-nums text-slate-50 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
+                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
+                      Flight State
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <span><span className="text-slate-400">Connected</span> No Link</span>
+                      <span><span className="text-slate-400">Armed</span> Disarmed</span>
+                      <span><span className="text-slate-400">Guided</span> No</span>
+                      <span><span className="text-slate-400">Manual</span> -</span>
+                      <span><span className="text-slate-400">Mode</span> -</span>
+                      <span><span className="text-slate-400">System</span> -</span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
+                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
+                      GPS
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <span><span className="text-slate-400">Fix</span> No Fix</span>
+                      <span><span className="text-slate-400">Sat</span> -</span>
+                      <span><span className="text-slate-400">Lat</span> -</span>
+                      <span><span className="text-slate-400">Lon</span> -</span>
+                      <span><span className="text-slate-400">Speed</span> -</span>
+                      <span><span className="text-slate-400">Course</span> -</span>
+                      <span><span className="text-slate-400">EPH</span> -</span>
+                      <span><span className="text-slate-400">EPV</span> -</span>
+                      <span><span className="text-slate-400">Alt MSL</span> -</span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
+                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
+                      Global Position
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <span><span className="text-slate-400">Lat</span> -</span>
+                      <span><span className="text-slate-400">Lon</span> -</span>
+                      <span><span className="text-slate-400">Alt Ellip</span> -</span>
+                      <span><span className="text-slate-400">Source</span> -</span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
+                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
+                      IMU
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <span><span className="text-slate-400">Accel X</span> -</span>
+                      <span><span className="text-slate-400">Accel Y</span> -</span>
+                      <span><span className="text-slate-400">Accel Z</span> -</span>
+                      <span><span className="text-slate-400">Gyro X</span> -</span>
+                      <span><span className="text-slate-400">Gyro Y</span> -</span>
+                      <span><span className="text-slate-400">Gyro Z</span> -</span>
+                      <span><span className="text-slate-400">Quat X</span> -</span>
+                      <span><span className="text-slate-400">Quat Y</span> -</span>
+                      <span><span className="text-slate-400">Quat Z</span> -</span>
+                      <span><span className="text-slate-400">Quat W</span> -</span>
+                      <span><span className="text-slate-400">Heading</span> -</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2481,6 +2767,22 @@ export function Maps() {
             </div>
           )}
         </div>
+
+        {/* Drone tools */}
+        <Button
+          size="icon"
+          variant="outline"
+          className={`absolute right-4 top-[248px] z-[1000] h-12 w-12 rounded-[16px] border-0 bg-white text-forest shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:bg-gray-50 sm:top-[180px] ${
+            routeActive ? "ring-2 ring-leaf/30" : ""
+          }`}
+          onClick={() => {
+            if (!routeActive) toggleAnalysisLayer("spraying-route");
+            setActiveAnalysisPanel("spraying-route");
+          }}
+          title="Drone Tools"
+        >
+          <Drone className="h-5 w-5" />
+        </Button>
 
         {/* Locate user */}
         <button

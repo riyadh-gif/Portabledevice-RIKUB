@@ -5,3 +5,4 @@ __pycache__/
 *.py[cod]
 web/public/imagery/
 contoh-orthommosaic-drone/
+docs/soerogis_frontend-main/

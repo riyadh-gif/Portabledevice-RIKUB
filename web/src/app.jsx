@@ -4,6 +4,7 @@ import { Menu } from './pages/Menu.jsx';
 import { Maps } from './pages/Maps.jsx';
 import { Detection } from './pages/Detection.jsx';
 import { Chatbot } from './pages/Chatbot.jsx';
+import { DroneDashboard } from './pages/DroneDashboard.jsx';
 
 // Keyed wrapper: remount on path change replays the fade-up enter animation.
 function AnimatedRoutes() {
@@ -14,6 +15,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<Splash />} />
         <Route path="/menu" element={<Menu />} />
         <Route path="/maps" element={<Maps />} />
+        <Route path="/drone-dashboard" element={<DroneDashboard />} />
         <Route path="/detection" element={<Detection />} />
         <Route path="/chatbot" element={<Chatbot />} />
         <Route path="*" element={<Navigate to="/" replace />} />

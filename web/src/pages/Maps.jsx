@@ -12,152 +12,34 @@ import {
   ArrowLeft,
   MapPinned,
   Search,
-  Layers,
-  LocateFixed,
   Loader2,
   MapPin,
-  Drone,
   X,
-  Minus,
-  Plus,
-  Sprout,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  SlidersHorizontal,
-  Info,
-  Trash2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { DroneFloatingButton } from "@/components/maps/drone/DroneFloatingButton";
+import { DroneTelemetryBar } from "@/components/maps/drone/DroneTelemetryBar";
+import { LayerPanel } from "@/components/maps/layers/LayerPanel";
+import { MapFloatingControls } from "@/components/maps/MapFloatingControls";
 import { createLocationMarker } from "@/components/maps/locationPopup";
+import { NdviHealthStats } from "@/components/maps/ndvi/NdviHealthStats";
+import { NdviZonesPanel } from "@/components/maps/ndvi/NdviZonesPanel";
+import { SprayTargetsPanel } from "@/components/maps/spray-targets/SprayTargetsPanel";
+import { SprayingRoutePanel } from "@/components/maps/spraying-route/SprayingRoutePanel";
+import {
+  BASE_BOUNDS,
+  BASE_LAYERS,
+  DEFAULT_NDVI_CATEGORIES,
+  DEFAULT_NDVI_ZONE_SETTINGS,
+} from "@/components/maps/mapConfig";
 
 L.Icon.Default.mergeOptions({
   iconUrl: markerIcon,
   iconRetinaUrl: markerIcon2x,
   shadowUrl: markerShadow,
 });
-
-const BASE_BOUNDS = [
-  [-8.23324, 113.68652],
-  [-8.05923, 113.90625],
-];
-const BASE_LAYERS = {
-  default: {
-    label: "Default",
-    preview: "https://a.tile.openstreetmap.org/5/26/16.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    maxNativeZoom: 19,
-    maxZoom: 24,
-  },
-  satellite: {
-    label: "Satelit",
-    preview:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/16/26",
-    attribution: "Tiles &copy; Esri",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    maxNativeZoom: 18,
-    maxZoom: 24,
-  },
-  terrain: {
-    label: "Terrain",
-    preview: "https://a.tile.opentopomap.org/5/26/16.png",
-    attribution:
-      'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    maxNativeZoom: 17,
-    maxZoom: 24,
-  },
-};
-const MAP_IMAGERY_LAYERS = [
-  {
-    id: "rgb",
-    label: "RGB",
-    preview: "/data/layer/RGB_layer_thumb.png",
-    className: "bg-gradient-to-br from-sky-100 to-cyan-100 text-blue-700",
-  },
-  {
-    id: "ndvi",
-    label: "NDVI",
-    preview: "/data/layer/NDVI_layer_thumb.png",
-    className:
-      "bg-gradient-to-br from-emerald-100 to-lime-100 text-emerald-700",
-  },
-];
-const MAP_ANALYSIS_LAYERS = [
-  {
-    id: "ndvi-zones",
-    label: "NDVI Zones",
-    shortLabel: "Zones",
-    preview: "/data/layer/NDVI_zones_layer_thumb.png",
-    className: "bg-gradient-to-br from-amber-100 to-red-100 text-amber-800",
-  },
-  {
-    id: "spray-targets",
-    label: "Spray Targets",
-    shortLabel: "Target",
-    preview: "/data/layer/spray_targets_layer_thumb.png",
-    className: "bg-gradient-to-br from-rose-100 to-pink-100 text-rose-700",
-  },
-  {
-    id: "spraying-route",
-    label: "Spraying Route",
-    shortLabel: "Route",
-    preview: "/data/layer/spraying_route_layer_thumb.png",
-    className: "bg-gradient-to-br from-indigo-100 to-sky-100 text-indigo-700",
-  },
-];
-const DEFAULT_NDVI_CATEGORIES = [
-  {
-    name: "Sangat Sehat",
-    range: "0.8-1.0",
-    color: "#0f7a3f",
-    percentage: 35,
-    area_ha: 0.82,
-  },
-  {
-    name: "Sehat",
-    range: "0.6-0.8",
-    color: "#1fbf63",
-    percentage: 26,
-    area_ha: 0.61,
-  },
-  {
-    name: "Cukup Sehat",
-    range: "0.4-0.6",
-    color: "#7bd85a",
-    percentage: 18,
-    area_ha: 0.43,
-  },
-  {
-    name: "Kurang Sehat",
-    range: "0.21-0.4",
-    color: "#f59e0b",
-    percentage: 12,
-    area_ha: 0.28,
-  },
-  {
-    name: "Tidak Sehat",
-    range: "0-0.21",
-    color: "#ef233c",
-    percentage: 6,
-    area_ha: 0.14,
-  },
-  {
-    name: "Non-Vegetasi",
-    range: "< 0",
-    color: "#27272a",
-    percentage: 3,
-    area_ha: 0.06,
-  },
-];
-const DEFAULT_NDVI_ZONE_SETTINGS = {
-  ndvi_min: 0,
-  ndvi_max: 0.6,
-  min_area_m2: 2,
-  merge_distance_m: 0.5,
-};
 
 export function Maps() {
   const navigate = useNavigate();
@@ -1809,612 +1691,61 @@ export function Maps() {
 
             {active.has("ndvi-zones") &&
               activeAnalysisPanel === "ndvi-zones" && (
-              <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain border-t border-gray-100 pt-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-800 ring-1 ring-emerald-900/10">
-                      <SlidersHorizontal
-                        className="h-3.5 w-3.5"
-                        strokeWidth={2.2}
-                      />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-black leading-tight text-gray-950">
-                        NDVI Zones
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {renderAnalysisPanelSwitch()}
-                    <button
-                      type="button"
-                      onClick={() => toggleAnalysisLayer("ndvi-zones")}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
-                      title="Tutup NDVI Zones"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-2 rounded-xl border border-emerald-950/10 bg-white px-2.5 py-2 shadow-sm">
-                  <div className="min-w-0">
-                    <span className="flex items-center gap-1 text-[10px] font-black text-gray-600">
-                      <span>NDVI Range</span>
-                      <button
-                        type="button"
-                        className="group relative grid h-4 w-4 place-items-center rounded-full text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 focus:outline-none"
-                        aria-label="Info NDVI Range"
-                        title="Threshold Min dan Max menentukan rentang nilai NDVI yang akan dijadikan kandidat zona."
-                      >
-                        <Info className="h-3 w-3" />
-                        <span className="pointer-events-none absolute left-0 top-full z-[1003] mt-1 hidden w-48 rounded-lg border border-emerald-100 bg-white px-2 py-1.5 text-left text-[10px] font-semibold leading-snug text-gray-700 shadow-[0_10px_28px_rgba(15,23,42,0.16)] group-hover:block group-focus:block">
-                          Threshold Min dan Max menentukan rentang nilai NDVI
-                          yang akan dijadikan kandidat zona.
-                        </span>
-                      </button>
-                    </span>
-
-                    <div className="ndvi-range-slider mt-3">
-                      <div className="ndvi-range-track" />
-                      <div
-                        className="ndvi-range-window"
-                        style={{
-                          left: `${ndviRangeMinPercent}%`,
-                          width: `${Math.max(0, ndviRangeMaxPercent - ndviRangeMinPercent)}%`,
-                        }}
-                      />
-                      <input
-                        type="range"
-                        min="-1"
-                        max="1"
-                        step="0.01"
-                        value={ndviZoneSettings.ndvi_min}
-                        onChange={(event) =>
-                          updateNdviZoneSetting("ndvi_min", event.target.value)
-                        }
-                        className="ndvi-range-input ndvi-range-input-min"
-                        style={{
-                          zIndex:
-                            ndviZoneSettings.ndvi_min >
-                            ndviZoneSettings.ndvi_max - 0.12
-                              ? 5
-                              : 3,
-                        }}
-                        aria-label="Geser NDVI minimum"
-                      />
-                      <input
-                        type="range"
-                        min="-1"
-                        max="1"
-                        step="0.01"
-                        value={ndviZoneSettings.ndvi_max}
-                        onChange={(event) =>
-                          updateNdviZoneSetting("ndvi_max", event.target.value)
-                        }
-                        className="ndvi-range-input ndvi-range-input-max"
-                        aria-label="Geser NDVI maksimum"
-                      />
-                    </div>
-                    <div className="mt-1.5 h-1.5 rounded-full bg-[linear-gradient(to_right,#27272a_0%,#27272a_50%,#ef233c_50%,#f59e0b_60.5%,#7bd85a_70%,#1fbf63_80%,#0f7a3f_90%,#0f7a3f_100%)] shadow-inner" />
-                    <div className="mt-0.5 flex justify-between text-[8px] font-bold tabular-nums text-gray-400">
-                      <span>-1</span>
-                      <span>0</span>
-                      <span>1</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div className="space-y-1">
-                      <label className="block">
-                        <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                          Min
-                        </span>
-                        <input
-                          type="number"
-                          min="-1"
-                          max="1"
-                          step="0.01"
-                          value={ndviZoneSettings.ndvi_min}
-                          onChange={(event) =>
-                            updateNdviZoneSetting(
-                              "ndvi_min",
-                              event.target.value,
-                            )
-                          }
-                          className="mt-0.5 h-7 w-full rounded-lg border border-gray-200 bg-gray-50 px-1 text-center text-[12px] font-black tabular-nums text-gray-900 outline-none transition-colors focus:border-emerald-700"
-                          aria-label="NDVI minimum"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                          Max
-                        </span>
-                        <input
-                          type="number"
-                          min="-1"
-                          max="1"
-                          step="0.01"
-                          value={ndviZoneSettings.ndvi_max}
-                          onChange={(event) =>
-                            updateNdviZoneSetting(
-                              "ndvi_max",
-                              event.target.value,
-                            )
-                          }
-                          className="mt-0.5 h-7 w-full rounded-lg border border-gray-200 bg-gray-50 px-1 text-center text-[12px] font-black tabular-nums text-gray-900 outline-none transition-colors focus:border-emerald-700"
-                          aria-label="NDVI maksimum"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block">
-                        <span className="flex items-center gap-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                          <span>Area</span>
-                          <button
-                            type="button"
-                            className="group relative grid h-3 w-3 shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 focus:outline-none"
-                            aria-label="Info area minimum"
-                            title="Polygon lebih kecil dari nilai ini dibuang sebagai noise."
-                          >
-                            <Info className="h-2.5 w-2.5" />
-                            <span className="pointer-events-none absolute bottom-full right-0 z-[1003] mb-1 hidden w-44 rounded-lg border border-emerald-100 bg-white px-2 py-1.5 text-left text-[10px] font-semibold leading-snug text-gray-700 shadow-[0_10px_28px_rgba(15,23,42,0.16)] group-hover:block group-focus:block">
-                              Polygon lebih kecil dari nilai ini dibuang sebagai
-                              noise.
-                            </span>
-                          </button>
-                        </span>
-                        <div className="mt-0.5 flex h-7 items-center rounded-lg border border-gray-200 bg-gray-50 px-1 transition-colors focus-within:border-emerald-700">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={ndviZoneSettings.min_area_m2}
-                            onChange={(event) =>
-                              updateNdviZoneSetting(
-                                "min_area_m2",
-                                event.target.value,
-                              )
-                            }
-                            className="min-w-0 flex-1 bg-transparent text-center text-[12px] font-black tabular-nums text-gray-900 outline-none"
-                          />
-                          <span className="shrink-0 text-[8px] font-bold text-gray-400">
-                            m2
-                          </span>
-                        </div>
-                      </label>
-                      <label className="block">
-                        <span className="flex items-center gap-0.5 text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                          <span>Merge</span>
-                          <button
-                            type="button"
-                            className="group relative grid h-3 w-3 shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 focus:outline-none"
-                            aria-label="Info merge distance"
-                            title="Polygon yang jaraknya dekat akan digabung dalam radius ini."
-                          >
-                            <Info className="h-2.5 w-2.5" />
-                            <span className="pointer-events-none absolute bottom-full right-0 z-[1003] mb-1 hidden w-44 rounded-lg border border-emerald-100 bg-white px-2 py-1.5 text-left text-[10px] font-semibold leading-snug text-gray-700 shadow-[0_10px_28px_rgba(15,23,42,0.16)] group-hover:block group-focus:block">
-                              Polygon yang jaraknya dekat akan digabung dalam
-                              radius ini.
-                            </span>
-                          </button>
-                        </span>
-                        <div className="mt-0.5 flex h-7 items-center rounded-lg border border-gray-200 bg-gray-50 px-1 transition-colors focus-within:border-emerald-700">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={ndviZoneSettings.merge_distance_m}
-                            onChange={(event) =>
-                              updateNdviZoneSetting(
-                                "merge_distance_m",
-                                event.target.value,
-                              )
-                            }
-                            className="min-w-0 flex-1 bg-transparent text-center text-[12px] font-black tabular-nums text-gray-900 outline-none"
-                          />
-                          <span className="shrink-0 text-[8px] font-bold text-gray-400">
-                            m
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
-                  <button
-                    type="button"
-                    onClick={generateNdviZones}
-                    disabled={ndviZonesLoading || !selectedImagery}
-                    className="flex h-9 min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 text-[12px] font-black text-white shadow-[0_10px_20px_rgba(6,95,70,0.18)] transition-colors hover:bg-emerald-900 disabled:bg-gray-200 disabled:text-gray-500"
-                  >
-                    {ndviZonesLoading && (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    )}
-                    Generate Zones
-                  </button>
-                  <button
-                    type="button"
-                    onClick={approveNdviZones}
-                    disabled={
-                      approveZonesLoading ||
-                      ndviZonesLoading ||
-                      ndviZoneFeatures.length === 0
-                    }
-                    className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 text-[11px] font-black text-emerald-800 shadow-sm transition-colors hover:bg-emerald-50 disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
-                    title="Simpan zona preview sebagai Spray Targets"
-                  >
-                    {approveZonesLoading && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    )}
-                    Approve Zones
-                  </button>
-                </div>
-
-                {ndviZonesError && (
-                  <div className="mt-2 rounded-2xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
-                    {ndviZonesError}
-                  </div>
-                )}
-
-                {ndviZonesSummary && (
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-emerald-700">
-                          Polygon
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {ndviZonesSummary.polygon_count}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-emerald-700">
-                          Area
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {formatNumber(ndviZonesSummary.total_area_m2)}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-rose-950/10 bg-rose-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-rose-700">
-                          Mean
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {formatNumber(ndviZonesSummary.mean_ndvi, 4)}
-                        </div>
-                      </div>
-                    </div>
-                    {ndviZoneFeatures.length > 0 && (
-                      <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
-                        <div className="grid grid-cols-[56px_1fr_76px_72px] items-center gap-2 border-b border-gray-100 bg-gray-50 py-2 pl-2.5 pr-[22px]">
-                          <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                            Zona
-                          </span>
-                          <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                            Area
-                          </span>
-                          <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                            NDVI
-                          </span>
-                          <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                            Aksi
-                          </span>
-                        </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto">
-                          {ndviZoneFeatures.map((feature, index) => {
-                            const props = feature.properties ?? {};
-                            const zoneId = props.id ?? index + 1;
-                            return (
-                              <div
-                                key={zoneId}
-                                className="grid w-full grid-cols-[56px_1fr_76px_72px] items-center gap-2 border-b border-gray-100 px-2.5 py-2 last:border-b-0"
-                              >
-                                <span className="text-center text-[12px] font-black text-gray-950">
-                                  Z{String(zoneId).padStart(2, "0")}
-                                </span>
-                                <span className="min-w-0 truncate text-center text-[11px] font-black tabular-nums text-gray-700">
-                                  {formatNumber(props.area_m2)} m2
-                                </span>
-                                <span className="inline-flex h-6 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-center text-[10px] font-black tabular-nums text-emerald-800">
-                                  {formatNumber(props.mean_ndvi, 4)}
-                                </span>
-                                <div className="mx-auto flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => focusNdviZone(zoneId)}
-                                    className="grid h-8 w-8 place-items-center rounded-xl border border-emerald-200 bg-white text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50"
-                                    title="Lihat di peta"
-                                  >
-                                    <MapPin className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteNdviZone(zoneId)}
-                                    className="grid h-8 w-8 place-items-center rounded-xl border border-red-100 bg-white text-red-400 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                                    title="Hapus zone"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <NdviZonesPanel
+                panelSwitch={renderAnalysisPanelSwitch()}
+                settings={ndviZoneSettings}
+                rangeMinPercent={ndviRangeMinPercent}
+                rangeMaxPercent={ndviRangeMaxPercent}
+                loading={ndviZonesLoading}
+                approveLoading={approveZonesLoading}
+                error={ndviZonesError}
+                summary={ndviZonesSummary}
+                features={ndviZoneFeatures}
+                selectedImagery={selectedImagery}
+                formatNumber={formatNumber}
+                onClose={() => toggleAnalysisLayer("ndvi-zones")}
+                onSettingChange={updateNdviZoneSetting}
+                onGenerate={generateNdviZones}
+                onApprove={approveNdviZones}
+                onFocusZone={focusNdviZone}
+                onDeleteZone={deleteNdviZone}
+              />
             )}
 
             {active.has("spray-targets") &&
               activeAnalysisPanel === "spray-targets" && (
-              <div className="mt-3 border-t border-gray-100 pt-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-black leading-tight text-gray-950">
-                      Spray Targets
-                    </div>
-                    <div className="mt-0.5 text-[10px] font-semibold text-gray-500">
-                      Polygon final dari database
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {sprayTargetsLoading && (
-                      <Loader2 className="h-4 w-4 animate-spin text-rose-600" />
-                    )}
-                    {renderAnalysisPanelSwitch()}
-                  </div>
-                </div>
-                {sprayTargetsError && (
-                  <div className="mt-2 rounded-2xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
-                    {sprayTargetsError}
-                  </div>
-                )}
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  <div className="rounded-xl border border-rose-950/10 bg-rose-50 px-2 py-1.5">
-                    <div className="text-[8px] font-black uppercase tracking-[0.1em] text-rose-700">
-                      Target
-                    </div>
-                    <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                      {sprayTargetFeatures.length}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-rose-950/10 bg-rose-50 px-2 py-1.5">
-                    <div className="text-[8px] font-black uppercase tracking-[0.1em] text-rose-700">
-                      Area
-                    </div>
-                    <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                      {formatNumber(sprayTargetAreaM2)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                    <div className="text-[8px] font-black uppercase tracking-[0.1em] text-emerald-700">
-                      Ready
-                    </div>
-                    <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                      {sprayReadyCount}
-                    </div>
-                  </div>
-                </div>
-                {sprayTargetFeatures.length > 0 && (
-                  <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white">
-                    <div className="grid grid-cols-[58px_minmax(0,1fr)_92px_54px] items-center justify-items-center gap-2 border-b border-gray-100 bg-gray-50 px-2.5 py-2">
-                      <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                        Zona
-                      </span>
-                      <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                        Area
-                      </span>
-                      <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                        Chamber
-                      </span>
-                      <span className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
-                        Aksi
-                      </span>
-                    </div>
-                    <div className="max-h-52 overflow-y-auto">
-                      {sprayTargetFeatures.map((feature, index) => {
-                        const props = feature.properties ?? {};
-                        const targetId = props.id ?? props.zone_code ?? index;
-                        return (
-                          <div
-                            key={targetId}
-                            className="grid w-full grid-cols-[58px_minmax(0,1fr)_92px_54px] items-center justify-items-center gap-2 border-b border-gray-100 px-2.5 py-2 last:border-b-0"
-                          >
-                            <span className="text-center text-[12px] font-black text-gray-950">
-                              {props.zone_code ?? `Z${String(index + 1).padStart(2, "0")}`}
-                            </span>
-                            <span className="min-w-0 truncate text-center text-[11px] font-black tabular-nums text-gray-700">
-                              {formatNumber(props.area_m2)} m2
-                            </span>
-                            <span
-                              className={`inline-flex h-7 w-full max-w-[92px] items-center justify-center rounded-full border px-2 text-center text-[10px] font-black ${
-                                props.chamber && props.chamber !== "none"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                  : "border-gray-200 bg-gray-50 text-gray-400"
-                              }`}
-                            >
-                              {props.chamber ?? "none"}
-                            </span>
-                            <div className="flex items-center justify-center">
-                              <button
-                                type="button"
-                                onClick={() => focusSprayTarget(targetId)}
-                                className="grid h-8 w-9 place-items-center rounded-xl border border-rose-200 bg-white text-rose-700 shadow-sm transition-colors hover:bg-rose-50"
-                                title="Lihat di peta"
-                              >
-                                <MapPin className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <SprayTargetsPanel
+                panelSwitch={renderAnalysisPanelSwitch()}
+                loading={sprayTargetsLoading}
+                error={sprayTargetsError}
+                features={sprayTargetFeatures}
+                totalAreaM2={sprayTargetAreaM2}
+                readyCount={sprayReadyCount}
+                formatNumber={formatNumber}
+                onFocusTarget={focusSprayTarget}
+              />
             )}
 
             {active.has("spraying-route") &&
               activeAnalysisPanel === "spraying-route" && (
-              <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-black leading-tight text-gray-950">
-                      Misi Penyemprotan
-                    </div>
-                    <div className="mt-0.5 text-[10px] font-semibold text-gray-500">
-                      Rute, waypoint, dan status drone
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {renderAnalysisPanelSwitch()}
-                    <button
-                      type="button"
-                      onClick={() => toggleAnalysisLayer("spraying-route")}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
-                      title="Tutup Spraying Route"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {sprayTargetFeatures.length === 0 ? (
-                  <div className="overflow-hidden rounded-2xl border border-dashed border-emerald-200 bg-gradient-to-br from-emerald-50 to-cream">
-                    <div className="px-4 pb-5 pt-4 text-center">
-                      <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-2xl bg-white text-forest shadow-sm ring-1 ring-emerald-100">
-                        <Layers className="h-5 w-5" />
-                      </div>
-                      <div className="text-[13px] font-black text-emerald-950">
-                        Belum ada target semprot
-                      </div>
-                      <p className="mx-auto mt-1 max-w-[310px] text-xs font-semibold leading-snug text-emerald-800">
-                        Aktifkan Spray Targets atau approve NDVI Zones terlebih dahulu sebelum membuat rute.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!active.has("spray-targets")) {
-                            toggleAnalysisLayer("spray-targets");
-                          } else {
-                            setActiveAnalysisPanel("spray-targets");
-                          }
-                        }}
-                        className="mt-4 inline-flex h-9 items-center justify-center rounded-xl bg-forest px-4 text-[11px] font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] transition-colors hover:bg-house"
-                      >
-                        Buka Spray Targets
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 border-t border-emerald-100 bg-white/70 text-center text-[9px] font-black uppercase tracking-[0.08em] text-emerald-800">
-                      <div className="px-2 py-2">Targets</div>
-                      <div className="border-x border-emerald-100 px-2 py-2">Route</div>
-                      <div className="px-2 py-2">Mission</div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-forest">
-                          Target
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {sprayTargetFeatures.length}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-forest">
-                          Waypoint
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {routeWaypointCount}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-emerald-950/10 bg-emerald-50 px-2 py-1.5">
-                        <div className="text-[8px] font-black uppercase tracking-[0.1em] text-emerald-700">
-                          Ready
-                        </div>
-                        <div className="mt-0.5 text-[13px] font-black tabular-nums text-gray-950">
-                          {sprayReadyCount}/{sprayTargetFeatures.length}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 rounded-xl border border-gray-200 bg-white p-2.5">
-                      <div className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
-                        Flight Settings
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="block">
-                          <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                            Altitude
-                          </span>
-                          <div className="mt-0.5 flex h-9 items-center rounded-xl border border-gray-200 bg-gray-50 px-2 focus-within:border-forest">
-                            <input
-                              type="number"
-                              min="1"
-                              step="0.5"
-                              value={routeAltitude}
-                              onChange={(event) => setRouteAltitude(Math.max(1, Number(event.target.value) || 1))}
-                              className="min-w-0 flex-1 bg-transparent text-center text-[14px] font-black tabular-nums text-gray-900 outline-none"
-                            />
-                            <span className="text-[10px] font-bold text-gray-400">m</span>
-                          </div>
-                        </label>
-                        <label className="block">
-                          <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
-                            Speed
-                          </span>
-                          <div className="mt-0.5 flex h-9 items-center rounded-xl border border-gray-200 bg-gray-50 px-2 focus-within:border-forest">
-                            <input
-                              type="number"
-                              min="0.5"
-                              step="0.5"
-                              value={routeSpeed}
-                              onChange={(event) => setRouteSpeed(Math.max(0.5, Number(event.target.value) || 0.5))}
-                              className="min-w-0 flex-1 bg-transparent text-center text-[14px] font-black tabular-nums text-gray-900 outline-none"
-                            />
-                            <span className="text-[10px] font-bold text-gray-400">m/s</span>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 grid gap-2">
-                      <button
-                        type="button"
-                        className="flex h-10 items-center justify-center rounded-xl bg-forest px-4 text-[12px] font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] transition-colors hover:bg-house"
-                      >
-                        Generate Route
-                      </button>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          disabled
-                          className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
-                          title="Belum terhubung ke backend drone"
-                        >
-                          Upload Mission
-                        </button>
-                        <button
-                          type="button"
-                          disabled
-                          className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
-                          title="Belum terhubung ke backend drone"
-                        >
-                          Execute
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-              </div>
+              <SprayingRoutePanel
+                panelSwitch={renderAnalysisPanelSwitch()}
+                targetCount={sprayTargetFeatures.length}
+                waypointCount={routeWaypointCount}
+                readyCount={sprayReadyCount}
+                altitude={routeAltitude}
+                speed={routeSpeed}
+                onAltitudeChange={setRouteAltitude}
+                onSpeedChange={setRouteSpeed}
+                onClose={() => toggleAnalysisLayer("spraying-route")}
+                onOpenTargets={() => {
+                  if (!active.has("spray-targets")) {
+                    toggleAnalysisLayer("spray-targets");
+                  } else {
+                    setActiveAnalysisPanel("spray-targets");
+                  }
+                }}
+              />
             )}
           </div>
             </div>
@@ -2423,380 +1754,45 @@ export function Maps() {
 
         {/* NDVI Health Stats */}
         {active.has("ndvi") && (
-          <div className="absolute right-4 top-[208px] z-[1000] w-[min(314px,calc(100vw-32px))] lg:right-20 lg:top-4">
-            <div className="max-h-[calc(100dvh-160px)] overflow-y-auto overscroll-contain rounded-[20px] border border-white/70 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.18)] backdrop-blur lg:max-h-[calc(100dvh-88px)]">
-              <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-lime-700 px-4 pb-3 pt-3 text-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/14 ring-1 ring-white/20">
-                      <Sprout className="h-4 w-4" strokeWidth={2} />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="truncate text-[15px] font-bold leading-tight">
-                        Kesehatan Tanaman
-                      </div>
-                      <div className="text-[10px] font-medium text-emerald-50/75">
-                        Analisis NDVI area aktif
-                      </div>
-                    </div>
-                  </div>
-                  <div className="shrink-0 rounded-full bg-white/14 px-2.5 py-1 text-right text-[11px] font-bold tabular-nums text-white ring-1 ring-white/20">
-                    {ndviStats ? ndviStats.total_area_ha : "-"} Ha
-                  </div>
-                </div>
-
-                <div className="mt-2.5 grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-emerald-200/25 bg-white/10 px-3 py-2 shadow-inner">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-emerald-50/70">
-                      Dominan
-                    </div>
-                    <div className="truncate text-[14px] font-bold">
-                      {dominantNdvi?.name}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[22px] font-black leading-none tabular-nums">
-                      {Math.round(Number(dominantNdvi?.percentage || 0))}%
-                    </div>
-                    <div className="text-[9px] font-semibold text-emerald-50/70">
-                      {dominantNdvi?.area_ha} Ha
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-4 pb-2 pt-2.5">
-                <div className="mb-1.5 text-[10px] font-semibold text-gray-500">
-                  <span>Skala NDVI</span>
-                </div>
-                <div
-                  className="h-2.5 w-full rounded-full shadow-inner"
-                  style={{
-                    background:
-                      "linear-gradient(to right,#27272a 0%,#27272a 50%,#ef233c 50%,#f59e0b 60.5%,#7bd85a 70%,#1fbf63 80%,#0f7a3f 90%,#0f7a3f 100%)",
-                  }}
-                />
-                <div className="relative mt-0.5 h-3">
-                  {[
-                    { label: "-1", left: "0%" },
-                    { label: "0", left: "50%" },
-                    { label: "0.4", left: "70%" },
-                    { label: "0.8", left: "90%" },
-                    { label: "1", left: "100%" },
-                  ].map(({ label, left }) => (
-                    <span
-                      key={label}
-                      className="absolute -translate-x-1/2 text-[9px] font-medium tabular-nums text-gray-400"
-                      style={{ left }}
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mx-4 h-px bg-gray-100" />
-
-              <div className="space-y-0.5 px-3 pb-2.5 pt-2">
-                {ndviCategories.map((cat) => (
-                  <div
-                    key={cat.name}
-                    className="rounded-xl border border-transparent px-2.5 py-1 transition-colors hover:bg-gray-50"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-baseline gap-1.5">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(15,23,42,0.05)]"
-                          style={{ background: cat.color }}
-                        />
-                        <span className="min-w-0 truncate text-[12px] font-bold leading-tight text-gray-800">
-                          {cat.name}
-                        </span>
-                        <span className="shrink-0 text-[9.5px] font-semibold tabular-nums text-gray-400">
-                          NDVI {cat.range}
-                        </span>
-                      </div>
-                      <span className="shrink-0 text-[12px] font-extrabold tabular-nums text-gray-800">
-                        {cat.percentage}%
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 pl-[18px]">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200/80 shadow-inner">
-                        <div
-                          className="h-full min-w-[8px] rounded-full shadow-[0_0_0_1px_rgba(15,23,42,0.04)]"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, Number(cat.percentage || 0)))}%`,
-                            background: cat.color,
-                          }}
-                        />
-                      </div>
-                      <span className="w-[66px] shrink-0 text-right text-[10px] font-bold tabular-nums text-gray-500">
-                        {cat.area_ha} Ha
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <NdviHealthStats
+            stats={ndviStats}
+            categories={ndviCategories}
+            dominant={dominantNdvi}
+          />
         )}
 
         {routeActive && (
-          <div className="absolute bottom-6 left-4 right-20 z-[1000] flex justify-end lg:left-auto lg:max-w-[calc(100vw-8rem)]">
-            <div className="max-w-full rounded-2xl border border-white/15 bg-slate-950/76 px-3 py-1.5 text-white shadow-[0_14px_34px_rgba(15,23,42,0.32)] backdrop-blur-md">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400 ring-4 ring-slate-400/15" />
-                  <span className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-slate-100">
-                    Drone Offline
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {!telemetryCollapsed && (
-                    <span className="rounded-full bg-slate-700/80 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-100 ring-1 ring-white/10">
-                      Mission Idle
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setTelemetryCollapsed((collapsed) => !collapsed)}
-                    className="grid h-6 w-6 place-items-center rounded-full bg-white/10 text-slate-100 ring-1 ring-white/10 transition hover:bg-white/20"
-                    aria-label={telemetryCollapsed ? "Expand telemetry" : "Collapse telemetry"}
-                    title={telemetryCollapsed ? "Expand telemetry" : "Collapse telemetry"}
-                  >
-                    {telemetryCollapsed ? (
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-              {!telemetryCollapsed && (
-                <div className="mt-1.5 grid max-h-[34dvh] gap-1.5 overflow-y-auto overscroll-contain pr-1 text-[10px] font-bold tabular-nums text-slate-50 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
-                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
-                      Flight State
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <span><span className="text-slate-400">Connected</span> No Link</span>
-                      <span><span className="text-slate-400">Armed</span> Disarmed</span>
-                      <span><span className="text-slate-400">Guided</span> No</span>
-                      <span><span className="text-slate-400">Manual</span> -</span>
-                      <span><span className="text-slate-400">Mode</span> -</span>
-                      <span><span className="text-slate-400">System</span> -</span>
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
-                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
-                      GPS
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <span><span className="text-slate-400">Fix</span> No Fix</span>
-                      <span><span className="text-slate-400">Sat</span> -</span>
-                      <span><span className="text-slate-400">Lat</span> -</span>
-                      <span><span className="text-slate-400">Lon</span> -</span>
-                      <span><span className="text-slate-400">Speed</span> -</span>
-                      <span><span className="text-slate-400">Course</span> -</span>
-                      <span><span className="text-slate-400">EPH</span> -</span>
-                      <span><span className="text-slate-400">EPV</span> -</span>
-                      <span><span className="text-slate-400">Alt MSL</span> -</span>
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
-                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
-                      Global Position
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <span><span className="text-slate-400">Lat</span> -</span>
-                      <span><span className="text-slate-400">Lon</span> -</span>
-                      <span><span className="text-slate-400">Alt Ellip</span> -</span>
-                      <span><span className="text-slate-400">Source</span> -</span>
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-white/7 px-2 py-1.5 ring-1 ring-white/8">
-                    <div className="mb-1 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">
-                      IMU
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <span><span className="text-slate-400">Accel X</span> -</span>
-                      <span><span className="text-slate-400">Accel Y</span> -</span>
-                      <span><span className="text-slate-400">Accel Z</span> -</span>
-                      <span><span className="text-slate-400">Gyro X</span> -</span>
-                      <span><span className="text-slate-400">Gyro Y</span> -</span>
-                      <span><span className="text-slate-400">Gyro Z</span> -</span>
-                      <span><span className="text-slate-400">Quat X</span> -</span>
-                      <span><span className="text-slate-400">Quat Y</span> -</span>
-                      <span><span className="text-slate-400">Quat Z</span> -</span>
-                      <span><span className="text-slate-400">Quat W</span> -</span>
-                      <span><span className="text-slate-400">Heading</span> -</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <DroneTelemetryBar
+            collapsed={telemetryCollapsed}
+            onToggle={() => setTelemetryCollapsed((collapsed) => !collapsed)}
+          />
         )}
 
-        {/* Zoom controls */}
-        <div className="absolute right-4 top-[82px] z-[1000] overflow-hidden rounded-[16px] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] sm:top-4">
-          <button
-            onClick={zoomIn}
-            className="grid h-12 w-12 place-items-center text-forest transition-colors hover:bg-gray-50"
-            title="Perbesar peta"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-          <div className="h-px bg-gray-100" />
-          <button
-            onClick={zoomOut}
-            className="grid h-12 w-12 place-items-center text-forest transition-colors hover:bg-gray-50"
-            title="Perkecil peta"
-          >
-            <Minus className="h-5 w-5" />
-          </button>
-        </div>
+        <MapFloatingControls
+          locating={locating}
+          onLocate={locateUser}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+        />
 
-        {/* Layer control */}
-        <div className="absolute right-4 top-[188px] z-[1000] sm:top-[120px]">
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-12 w-12 rounded-[16px] border-0 bg-white text-forest shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:bg-gray-50"
-            onClick={() => setPanelOpen((v) => !v)}
-            title="Layers"
-          >
-            <Layers className="h-5 w-5" />
-          </Button>
-          {panelOpen && (
-            <div className="absolute right-[56px] top-0 w-[min(360px,calc(100vw-88px))] rounded-2xl bg-card p-3 shadow-soft animate-fade-up sm:p-3.5">
-              <div className="mb-1.5 flex items-center justify-between gap-3">
-                <div className="text-[14px] font-bold text-foreground">
-                  Map type
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="Tutup lapisan"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mb-2.5 grid grid-cols-3 gap-2">
-                {Object.entries(BASE_LAYERS).map(([id, layer]) => (
-                  <button
-                    key={id}
-                    onClick={() => setBaseLayer(id)}
-                    className={`group flex flex-col items-center gap-1 rounded-xl p-1 text-[11px] font-semibold transition-colors hover:bg-muted sm:text-xs ${baseLayer === id ? "text-forest" : "text-muted-foreground"}`}
-                  >
-                    <span
-                      className={`block h-12 w-12 overflow-hidden rounded-xl border-2 bg-white p-0.5 sm:h-[56px] sm:w-[56px] ${baseLayer === id ? "border-leaf ring-2 ring-leaf/20" : "border-border"}`}
-                    >
-                      <img
-                        src={layer.preview}
-                        alt={layer.label}
-                        className="h-full w-full rounded-[8px] object-cover"
-                      />
-                    </span>
-                    {layer.label}
-                  </button>
-                ))}
-              </div>
+        <LayerPanel
+          open={panelOpen}
+          active={active}
+          baseLayer={baseLayer}
+          imageryError={imageryError}
+          imageryLoading={imageryLoading}
+          onToggleOpen={() => setPanelOpen((value) => !value)}
+          onClose={() => setPanelOpen(false)}
+          onBaseLayer={setBaseLayer}
+          onToggleImagery={toggleImageryLayer}
+          onToggleAnalysis={toggleAnalysisLayer}
+        />
 
-              <div className="mb-1.5 border-t border-border pt-2 text-[14px] font-bold text-foreground">
-                Map Imagery
-              </div>
-              {imageryError && (
-                <div className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
-                  {imageryError}
-                </div>
-              )}
-              <div className="mb-2.5 grid grid-cols-3 gap-2">
-                {MAP_IMAGERY_LAYERS.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => toggleImageryLayer(l.id)}
-                    disabled={imageryLoading}
-                    className={`group flex flex-col items-center gap-1 rounded-xl p-1 text-[11px] font-semibold transition-colors hover:bg-muted sm:text-xs ${active.has(l.id) ? "text-forest" : "text-muted-foreground"} disabled:opacity-60`}
-                  >
-                    <span
-                      className={`relative block h-12 w-12 overflow-hidden rounded-xl border-2 bg-white p-0.5 sm:h-[56px] sm:w-[56px] ${active.has(l.id) ? "border-leaf ring-2 ring-leaf/20" : "border-border"}`}
-                    >
-                      <img
-                        src={l.preview}
-                        alt={l.label}
-                        className="h-full w-full rounded-[8px] object-cover"
-                      />
-                      {imageryLoading && (
-                        <span className="absolute inset-0 flex items-center justify-center rounded-[8px] bg-white/70">
-                          <Loader2 className="h-4 w-4 animate-spin text-forest" />
-                        </span>
-                      )}
-                    </span>
-                    {l.label}
-                  </button>
-                ))}
-              </div>
+        <DroneFloatingButton
+          active={routeActive}
+          onClick={() => navigate("/drone-dashboard")}
+        />
 
-              <div className="mb-1.5 border-t border-border pt-2 text-[14px] font-bold text-foreground">
-                Map Analysis
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {MAP_ANALYSIS_LAYERS.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => toggleAnalysisLayer(l.id)}
-                    className={`group flex flex-col items-center gap-1 rounded-xl p-1 text-[11px] font-semibold transition-colors hover:bg-muted sm:text-xs ${active.has(l.id) ? "text-forest" : "text-muted-foreground"}`}
-                  >
-                    <span
-                      className={`block h-12 w-12 overflow-hidden rounded-xl border-2 bg-white p-0.5 sm:h-[56px] sm:w-[56px] ${active.has(l.id) ? "border-leaf ring-2 ring-leaf/20" : "border-border"}`}
-                    >
-                      <img
-                        src={l.preview}
-                        alt={l.label}
-                        className="h-full w-full rounded-[8px] object-cover"
-                      />
-                    </span>
-                    <span className="w-full text-center leading-tight">
-                      {l.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Drone tools */}
-        <Button
-          size="icon"
-          variant="outline"
-          className={`absolute right-4 top-[248px] z-[1000] h-12 w-12 rounded-[16px] border-0 bg-white text-forest shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:bg-gray-50 sm:top-[180px] ${
-            routeActive ? "ring-2 ring-leaf/30" : ""
-          }`}
-          onClick={() => {
-            if (!routeActive) toggleAnalysisLayer("spraying-route");
-            setActiveAnalysisPanel("spraying-route");
-          }}
-          title="Drone Tools"
-        >
-          <Drone className="h-5 w-5" />
-        </Button>
-
-        {/* Locate user */}
-        <button
-          onClick={locateUser}
-          disabled={locating}
-          className="absolute bottom-6 right-4 z-[1000] grid h-12 w-12 place-items-center rounded-[16px] bg-white text-forest shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-colors hover:bg-gray-50 disabled:text-gray-400"
-          title="Lokasi saya"
-        >
-          {locating ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <LocateFixed className="h-5 w-5" />
-          )}
-        </button>
       </div>
     </div>
   );

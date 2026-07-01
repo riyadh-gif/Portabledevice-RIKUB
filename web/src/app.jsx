@@ -9,13 +9,14 @@ import { DroneDashboard } from './pages/DroneDashboard.jsx';
 // Keyed wrapper: remount on path change replays the fade-up enter animation.
 function AnimatedRoutes() {
   const location = useLocation();
+  const isGcs = location.pathname.startsWith('/drone-dashboard');
   return (
-    <div key={location.pathname} className="h-full animate-fade-up">
+    <div key={isGcs ? 'gcs' : location.pathname} className={isGcs ? 'h-full' : 'h-full animate-fade-up'}>
       <Routes location={location}>
         <Route path="/" element={<Splash />} />
         <Route path="/menu" element={<Menu />} />
         <Route path="/maps" element={<Maps />} />
-        <Route path="/drone-dashboard" element={<DroneDashboard />} />
+        <Route path="/drone-dashboard/*" element={<DroneDashboard />} />
         <Route path="/detection" element={<Detection />} />
         <Route path="/chatbot" element={<Chatbot />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -2,6 +2,140 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/gcs-fonts/0e7b7e0b829e3eb9-s.2j75_l12byk_u.woff2") format("woff2");
+  unicode-range: U+102-103, U+110-111, U+128-129, U+168-169, U+1A0-1A1, U+1AF-1B0, U+300-301, U+303-304, U+308-309, U+323, U+329, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/gcs-fonts/daf789e4474d0d90-s.07wt1b-68kohk.woff2") format("woff2");
+  unicode-range: U+100-2BA, U+2BD-2C5, U+2C7-2CC, U+2CE-2D7, U+2DD-2FF, U+304, U+308, U+329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/gcs-fonts/9e9f04e3c37952ab-s.p.0pan85mumqyf3.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Anton Fallback";
+  src: local("Arial");
+  ascent-override: 129.7%;
+  descent-override: 36.29%;
+  line-gap-override: 0%;
+  size-adjust: 90.69%;
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("/gcs-fonts/efadc3f7fcf6ac94-s.2dw4wc11szodo.woff2") format("woff2");
+  unicode-range: U+460-52F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("/gcs-fonts/8e410338cab7e12e-s.2888ryxa0751p.woff2") format("woff2");
+  unicode-range: U+301, U+400-45F, U+490-491, U+4B0-4B1, U+2116;
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("/gcs-fonts/7e93c0a52799e849-s.081af6y49e67w.woff2") format("woff2");
+  unicode-range: U+102-103, U+110-111, U+128-129, U+168-169, U+1A0-1A1, U+1AF-1B0, U+300-301, U+303-304, U+308-309, U+323, U+329, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("/gcs-fonts/037b6aa687f94b32-s.0evsli58wo2lo.woff2") format("woff2");
+  unicode-range: U+100-2BA, U+2BD-2C5, U+2C7-2CC, U+2CE-2D7, U+2DD-2FF, U+304, U+308, U+329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("/gcs-fonts/9a800f173b8d9e8f-s.p.3nglv5iys3s0a.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Oswald Fallback";
+  src: local("Arial");
+  ascent-override: 146.51%;
+  descent-override: 35.49%;
+  line-gap-override: 0%;
+  size-adjust: 81.43%;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/13bf9871fe164e7f-s.2f7nqdagzwx2-.woff2") format("woff2");
+  unicode-range: U+460-52F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/cc545e633e20c56d-s.176arc174-8zp.woff2") format("woff2");
+  unicode-range: U+301, U+400-45F, U+490-491, U+4B0-4B1, U+2116;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/71b036adf157cdcf-s.0bp8oijd_gu96.woff2") format("woff2");
+  unicode-range: U+370-377, U+37A-37F, U+384-38A, U+38C, U+38E-3A1, U+3A3-3FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/89b21bb081cb7469-s.1fby2rem9ngyr.woff2") format("woff2");
+  unicode-range: U+102-103, U+110-111, U+128-129, U+168-169, U+1A0-1A1, U+1AF-1B0, U+300-301, U+303-304, U+308-309, U+323, U+329, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/3fe682a82f50d426-s.0vfdmo25voy_0.woff2") format("woff2");
+  unicode-range: U+100-2BA, U+2BD-2C5, U+2C7-2CC, U+2CE-2D7, U+2DD-2FF, U+304, U+308, U+329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/gcs-fonts/70bc3e132a0a741e-s.p.3t6q91iet4nsy.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono Fallback";
+  src: local("Arial");
+  ascent-override: 75.79%;
+  descent-override: 22.29%;
+  line-gap-override: 0%;
+  size-adjust: 134.59%;
+}
+
 /* Theme — Starbucks-inspired system (DESIGN-starbucks.md), adapted for Jaga Padi.
    Warm cream canvas + four-tier green + gold reserved accent. */
 @layer base {
@@ -133,10 +267,33 @@
 .jp-det-slider::-webkit-scrollbar {
   display: none;
 }
-.jp-chamber-opt:hover {
-  background: #fff1f2 !important;
-  color: #be123c !important;
-}
+  .jp-chamber-opt:hover {
+    background: #fff1f2 !important;
+    color: #be123c !important;
+  }
+
+  .gcs-app {
+    background-color: #e2e8f0;
+    background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 24px 24px;
+    letter-spacing: 0;
+    font-family: "Oswald", "Oswald Fallback", sans-serif;
+    color: #191c1e;
+  }
+
+  .gcs-app .glass-panel {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+  }
+
+  .gcs-app .material-symbols-outlined {
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 500,
+      "GRAD" 0,
+      "opsz" 24;
+  }
 
 .jp-location-spinner {
   width: 24px;

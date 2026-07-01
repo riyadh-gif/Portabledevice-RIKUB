@@ -29,9 +29,23 @@ export default {
         cream: '#f2f0eb',    // Neutral Warm canvas
         ceramic: '#edebe9',
         sky: '#00754A',      // legacy alias -> green accent
+        'gcs-primary': '#005bb3',
+        'gcs-secondary': '#656100',
+        'gcs-secondary-fixed': '#fbef00',
+        'gcs-on-secondary-fixed': '#1e1c00',
+        'gcs-surface': '#f7f9fb',
+        'gcs-on-surface': '#191c1e',
+        'gcs-muted': '#414754',
+        'gcs-outline': '#c0c6d6',
+        'gcs-error': '#ba1a1a',
+        'gcs-bg': '#e2e8f0',
       },
       fontFamily: {
         sans: ['Inter Variable', 'Inter', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+        headline: ['Anton', 'Anton Fallback', 'sans-serif'],
+        data: ['Oswald', 'Oswald Fallback', 'sans-serif'],
+        technical: ['JetBrains Mono', 'JetBrains Mono Fallback', 'monospace'],
+        body: ['Oswald', 'Oswald Fallback', 'sans-serif'],
       },
       borderRadius: {
         lg: 'var(--radius)',

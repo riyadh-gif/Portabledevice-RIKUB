@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { DroneFloatingButton } from "@/components/maps/drone/DroneFloatingButton";
 import { DroneTelemetryBar } from "@/components/maps/drone/DroneTelemetryBar";
+import { DroneTelemetryProvider } from "@/components/gcs/DroneTelemetryProvider";
+import { diagnosticsCoords, useDiagnostics } from "@/lib/gcs/diagnostics";
 import { LayerPanel } from "@/components/maps/layers/LayerPanel";
 import { MapFloatingControls } from "@/components/maps/MapFloatingControls";
 import { createLocationMarker } from "@/components/maps/locationPopup";
@@ -43,6 +45,7 @@ L.Icon.Default.mergeOptions({
 
 export function Maps() {
   const navigate = useNavigate();
+  const { data: diagnosticsData } = useDiagnostics();
   const mapDiv = useRef(null);
   const map = useRef(null);
   const baseLayers = useRef({});
@@ -58,6 +61,7 @@ export function Maps() {
   const fieldLocationMarker = useRef(null);
   const userLocationMarker = useRef(null);
   const userLocationCircle = useRef(null);
+  const droneLocationMarker = useRef(null);
   const searchTimeout = useRef(null);
   const [baseLayer, setBaseLayerState] = useState("satellite");
   const [active, setActive] = useState(() => new Set());
@@ -1288,6 +1292,29 @@ export function Maps() {
     map.current?.zoomOut();
   }
 
+  function locateDrone() {
+    const coords = diagnosticsCoords(diagnosticsData);
+    if (!map.current || !coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lon)) {
+      alert("Lokasi drone belum tersedia dari telemetry.");
+      return;
+    }
+
+    const latlng = [coords.lat, coords.lon];
+    if (droneLocationMarker.current) {
+      map.current.removeLayer(droneLocationMarker.current);
+    }
+
+    const icon = L.divIcon({
+      className: "",
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      html: '<div style="position:relative;width:44px;height:44px"><span style="position:absolute;left:50%;top:50%;width:40px;height:40px;margin-left:-20px;margin-top:-20px;border-radius:9999px;background:rgba(0,91,179,0.24);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite"></span><span style="position:absolute;left:50%;top:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:9999px;background:rgba(0,91,179,0.20);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite;animation-delay:1.2s"></span><svg width="38" height="38" viewBox="-19 -19 38 38" aria-hidden="true" style="position:absolute;left:50%;top:50%;margin-left:-19px;margin-top:-19px;filter:drop-shadow(0 7px 12px rgba(0,41,82,0.45))"><path d="M0,-14 L10,12 L0,6 L-10,12 Z" fill="#005bb3" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg></div>',
+    });
+
+    droneLocationMarker.current = L.marker(latlng, { icon, interactive: false }).addTo(map.current);
+    map.current.flyTo(latlng, 17, { duration: 1 });
+  }
+
   function locateUser() {
     if (!map.current || !navigator.geolocation) {
       alert("Browser tidak mendukung geolocation.");
@@ -1433,6 +1460,9 @@ export function Maps() {
   const ndviRangeMinPercent = ((ndviZoneSettings.ndvi_min + 1) / 2) * 100;
   const ndviRangeMaxPercent = ((ndviZoneSettings.ndvi_max + 1) / 2) * 100;
   const routeActive = active.has("spraying-route");
+  const droneCoords = diagnosticsCoords(diagnosticsData);
+  const droneLocationAvailable =
+    !!droneCoords && Number.isFinite(droneCoords.lat) && Number.isFinite(droneCoords.lon);
   const sprayTargetAreaM2 = sprayTargetFeatures.reduce(
     (sum, feature) => sum + Number(feature.properties?.area_m2 || 0),
     0,
@@ -1501,6 +1531,8 @@ export function Maps() {
         </div>
         <div className="w-[86px]" />
       </header>
+
+      <DroneTelemetryProvider />
 
       <div className="relative min-h-0 flex-1">
         <div ref={mapDiv} className="absolute inset-0" />
@@ -1770,7 +1802,9 @@ export function Maps() {
 
         <MapFloatingControls
           locating={locating}
+          droneLocationAvailable={droneLocationAvailable}
           onLocate={locateUser}
+          onLocateDrone={locateDrone}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
         />

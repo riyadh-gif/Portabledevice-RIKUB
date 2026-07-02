@@ -43,15 +43,17 @@ class ApprovedZonesSaveRequest(BaseModel):
     geojson: dict
 
 
-class PolygonChamberUpdate(BaseModel):
-    chamber: str
+class PolygonChambersUpdate(BaseModel):
+    mode: str
+    selected_chambers: list[str] | None = None
 
 
 class TargetDetectionCreate(BaseModel):
-    name: str
-    category: str
-    group_name: str
+    disease_name: str
     confidence: float | None = None
+    sample_lat: float | None = None
+    sample_lng: float | None = None
+    chamber: str
     image_path: str | None = None
 
 
@@ -81,14 +83,43 @@ def imagery_to_dict(imagery: FieldImagery) -> dict:
     }
 
 
+VALID_CHAMBERS = {"fungisida", "insektisida"}
+VALID_CHAMBER_MODES = {"none", "auto", "manual"}
+
+
+def normalize_chambers(values: list[str] | None) -> list[str]:
+    chambers = []
+    for value in values or []:
+        chamber = value.strip().lower()
+        if not chamber:
+            continue
+        if chamber not in VALID_CHAMBERS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported chamber: {value}",
+            )
+        if chamber not in chambers:
+            chambers.append(chamber)
+    return chambers
+
+
+def auto_chambers_from_detections(polygon: SprayPolygon) -> list[str]:
+    return normalize_chambers([
+        detection.chamber
+        for detection in polygon.detections
+        if detection.chamber
+    ])
+
+
 def detection_to_dict(detection: TargetDetection) -> dict:
     return {
         "id": str(detection.id),
         "polygon_id": str(detection.polygon_id),
-        "name": detection.name,
-        "category": detection.category,
-        "group_name": detection.group_name,
+        "disease_name": detection.disease_name,
         "confidence": detection.confidence,
+        "sample_lat": detection.sample_lat,
+        "sample_lng": detection.sample_lng,
+        "chamber": detection.chamber,
         "image_path": detection.image_path,
         "created_at": detection.created_at.isoformat()
         if detection.created_at
@@ -107,7 +138,8 @@ def spray_polygon_to_dict(polygon: SprayPolygon) -> dict:
         "area_m2": polygon.area_m2,
         "mean_ndvi": polygon.mean_ndvi,
         "settings": polygon.settings,
-        "chamber": polygon.chamber,
+        "selected_chambers": polygon.selected_chambers or [],
+        "chamber_mode": polygon.chamber_mode or "none",
         "detections": [detection_to_dict(item) for item in polygon.detections],
         "created_at": polygon.created_at.isoformat()
         if polygon.created_at
@@ -129,7 +161,8 @@ def spray_polygons_to_geojson(polygons: list[SprayPolygon]) -> dict:
                     "area_m2": polygon.area_m2,
                     "mean_ndvi": polygon.mean_ndvi,
                     "settings": polygon.settings,
-                    "chamber": polygon.chamber,
+                    "selected_chambers": polygon.selected_chambers or [],
+                    "chamber_mode": polygon.chamber_mode or "none",
                     "detections": [
                         detection_to_dict(item) for item in polygon.detections
                     ],
@@ -700,7 +733,8 @@ def save_ndvi_zones(
             area_m2=float(area_m2),
             mean_ndvi=properties.get("mean_ndvi"),
             settings=settings,
-            chamber="none",
+            selected_chambers=[],
+            chamber_mode="none",
         )
         db.add(polygon)
         polygons.append(polygon)
@@ -743,10 +777,10 @@ def list_spray_targets(
     }
 
 
-@polygon_router.patch("/{polygon_id}/chamber")
-def update_polygon_chamber(
+@polygon_router.patch("/{polygon_id}/chambers")
+def update_polygon_chambers(
     polygon_id: UUID,
-    payload: PolygonChamberUpdate,
+    payload: PolygonChambersUpdate,
     db: Session = Depends(get_db),
 ) -> dict:
     polygon = db.get(SprayPolygon, polygon_id)
@@ -756,14 +790,27 @@ def update_polygon_chamber(
             detail=f"Polygon not found: {polygon_id}",
         )
 
-    chamber = payload.chamber.strip()
-    if not chamber:
+    mode = payload.mode.strip().lower()
+    if mode not in VALID_CHAMBER_MODES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="chamber is required",
+            detail="mode must be one of: none, auto, manual",
         )
 
-    polygon.chamber = chamber
+    if mode == "manual":
+        selected_chambers = normalize_chambers(payload.selected_chambers)
+        if not selected_chambers:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="selected_chambers is required for manual mode",
+            )
+    elif mode == "auto":
+        selected_chambers = auto_chambers_from_detections(polygon)
+    else:
+        selected_chambers = []
+
+    polygon.selected_chambers = selected_chambers
+    polygon.chamber_mode = mode
     db.commit()
     db.refresh(polygon)
     return spray_polygon_to_dict(polygon)
@@ -782,21 +829,31 @@ def add_target_detection(
             detail=f"Polygon not found: {polygon_id}",
         )
 
-    detection = TargetDetection(
-        polygon_id=polygon.id,
-        name=payload.name.strip(),
-        category=payload.category.strip(),
-        group_name=payload.group_name.strip(),
-        confidence=payload.confidence,
-        image_path=payload.image_path,
-    )
-    if not detection.name or not detection.category or not detection.group_name:
+    disease_name = payload.disease_name.strip()
+    chamber = payload.chamber.strip().lower()
+    if not disease_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="name, category, and group_name are required",
+            detail="disease_name is required",
         )
+    normalize_chambers([chamber])
+
+    detection = TargetDetection(
+        polygon_id=polygon.id,
+        disease_name=disease_name,
+        confidence=payload.confidence,
+        sample_lat=payload.sample_lat,
+        sample_lng=payload.sample_lng,
+        chamber=chamber,
+        image_path=payload.image_path,
+    )
 
     db.add(detection)
+    db.flush()
+    if polygon.chamber_mode != "manual":
+        polygon.selected_chambers = auto_chambers_from_detections(polygon)
+        polygon.chamber_mode = "auto" if polygon.selected_chambers else "none"
+
     db.commit()
     db.refresh(detection)
     return detection_to_dict(detection)

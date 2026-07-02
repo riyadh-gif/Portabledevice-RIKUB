@@ -21,6 +21,11 @@ app.mount(
     StaticFiles(directory=Path(__file__).resolve().parents[1] / "storage" / "imagery"),
     name="imagery",
 )
+app.mount(
+    "/detections",
+    StaticFiles(directory=Path(__file__).resolve().parents[1] / "storage" / "detections"),
+    name="detections",
+)
 
 
 @app.get("/")

@@ -70,7 +70,8 @@ class SprayPolygon(Base):
     area_m2 = Column(Float, nullable=False)
     mean_ndvi = Column(Float)
     settings = Column(JSONB, nullable=False)
-    chamber = Column(Text, nullable=False, default="none")
+    selected_chambers = Column(JSONB, nullable=False, default=list)
+    chamber_mode = Column(Text, nullable=False, default="none")
     created_at = Column(DateTime, server_default=func.now())
 
     detections = relationship(
@@ -90,10 +91,11 @@ class TargetDetection(Base):
         nullable=False,
     )
 
-    name = Column(Text, nullable=False)
-    category = Column(Text, nullable=False)
-    group_name = Column(Text, nullable=False)
+    disease_name = Column(Text, nullable=False)
     confidence = Column(Float)
+    sample_lat = Column(Float)
+    sample_lng = Column(Float)
+    chamber = Column(Text)
     image_path = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
 

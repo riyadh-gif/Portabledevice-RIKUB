@@ -1,5 +1,19 @@
 import { Loader2, MapPin } from "lucide-react";
 
+
+function formatDisplayLabel(value) {
+  return String(value ?? "")
+    .trim()
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatChambers(chambers) {
+  return chambers.map(formatDisplayLabel).filter(Boolean).join(", ");
+}
+
 function Stat({ label, value, tone = "rose" }) {
   const colors =
     tone === "emerald"
@@ -74,6 +88,10 @@ export function SprayTargetsPanel({
             {features.map((feature, index) => {
               const props = feature.properties ?? {};
               const targetId = props.id ?? props.zone_code ?? index;
+              const selectedChambers = Array.isArray(props.selected_chambers)
+                ? props.selected_chambers
+                : [];
+              const chamberLabel = formatChambers(selectedChambers);
               return (
                 <div
                   key={targetId}
@@ -87,12 +105,13 @@ export function SprayTargetsPanel({
                   </span>
                   <span
                     className={`inline-flex h-7 w-full max-w-[92px] items-center justify-center rounded-full border px-2 text-center text-[10px] font-black ${
-                      props.chamber && props.chamber !== "none"
+                      selectedChambers.length > 0
                         ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                         : "border-gray-200 bg-gray-50 text-gray-400"
                     }`}
+                    title={chamberLabel || "none"}
                   >
-                    {props.chamber ?? "none"}
+                    {chamberLabel || "none"}
                   </span>
                   <div className="flex items-center justify-center">
                     <button

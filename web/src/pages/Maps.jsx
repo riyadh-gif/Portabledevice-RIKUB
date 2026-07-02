@@ -202,6 +202,15 @@ export function Maps() {
       .replaceAll("'", "&#39;");
   }
 
+  function formatDisplayLabel(value) {
+    return String(value ?? "")
+      .trim()
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  }
+
   function clampNdviValue(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return 0;
@@ -364,6 +373,8 @@ export function Maps() {
       }
       if (active.has("spray-targets")) {
         loadSprayTargets(fieldId, imagery);
+      } else if (active.has("spraying-route")) {
+        loadSprayTargets(fieldId, imagery, { renderLayer: false });
       }
       if (options.fit) zoomToSelectedField(imagery);
     } catch (err) {
@@ -458,6 +469,9 @@ export function Maps() {
       } else {
         loadSprayTargets();
       }
+    }
+    if (id === "spraying-route" && !active.has(id)) {
+      loadSprayTargets(undefined, undefined, { renderLayer: false });
     }
     if (!isActive) {
       setActiveAnalysisPanel(id);
@@ -771,17 +785,28 @@ export function Maps() {
 
   function sprayTargetPopupContent(center, address, props = {}) {
     const zoneCode = escapeHtml(props?.zone_code ?? "Target");
-    const chamber = escapeHtml(props?.chamber ?? "none");
+    const selectedChambers = Array.isArray(props?.selected_chambers)
+      ? props.selected_chambers
+      : [];
+    const rawChamberMode = props?.chamber_mode ?? "none";
+    const chamberMode = escapeHtml(rawChamberMode);
     const detections = Array.isArray(props?.detections) ? props.detections : [];
+    const selectedChamberLabel = selectedChambers
+      .map((item) => formatDisplayLabel(item))
+      .filter(Boolean)
+      .join(", ");
+    const autoStatus = detections.length === 0
+      ? "Menunggu hasil deteksi"
+      : selectedChamberLabel
+        ? `Rekomendasi: ${selectedChamberLabel}`
+        : "Belum ada chamber dari deteksi";
     const areaM2 = props?.area_m2 != null ? `${formatNumber(props.area_m2)} m²` : "-";
     const meanNdvi = props?.mean_ndvi != null ? formatNumber(props.mean_ndvi, 4) : "-";
 
-    const chamberOpts = ["none", "fungisida", "bakterisida", "insektisida"]
+    const chamberOpts = ["fungisida", "insektisida"]
       .map((opt) => {
-        const active = chamber === opt;
-        return `<div class="jp-chamber-opt" data-value="${opt}" style="padding:9px 12px;font-size:12px;font-weight:700;color:${active ? "#be123c" : "#334155"};cursor:pointer;display:flex;align-items:center;gap:8px;background:${active ? "#fff1f2" : "transparent"}">
-          <span style="width:7px;height:7px;border-radius:50%;background:${active ? "#e11d48" : "#e2e8f0"};flex-shrink:0"></span>${opt}
-        </div>`;
+        const active = selectedChambers.includes(opt);
+        return `<button type="button" class="jp-chamber-opt" data-value="${opt}" style="height:38px;border-radius:11px;border:1.5px solid ${active ? "#fb7185" : "#e2e8f0"};padding:0 10px;font-size:11px;font-weight:850;color:${active ? "#be123c" : "#334155"};cursor:pointer;background:${active ? "#fff1f2" : "#fff"};box-shadow:${active ? "inset 0 0 0 1px rgba(244,63,94,.08)" : "none"}">${escapeHtml(formatDisplayLabel(opt))}</button>`;
       })
       .join("");
 
@@ -803,23 +828,23 @@ export function Maps() {
       </div>`;
     } else {
       const cards = detections.map((d) => {
-        const name = escapeHtml(d.name ?? "-");
-        const cat = escapeHtml([d.category, d.group_name].filter(Boolean).join(" · "));
+        const name = escapeHtml(formatDisplayLabel(d.disease_name) || "-");
+        const cat = escapeHtml(formatDisplayLabel(d.chamber) || "-");
         const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
         const confBar = conf != null
           ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px">
                <div style="flex:1;height:4px;background:#fecaca;border-radius:999px;overflow:hidden">
-                 <div style="width:${conf}%;height:100%;background:#f59e0b;border-radius:999px"></div>
+                 <div style="width:${conf}%;height:100%;background:#e11d48;border-radius:999px"></div>
                </div>
-               <span style="font-size:10px;font-weight:800;color:#b45309">${conf}%</span>
+               <span style="font-size:10px;font-weight:800;color:#be123c">${conf}%</span>
              </div>`
           : "";
         const img = d.image_path
-          ? `<img src="${escapeHtml(d.image_path)}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0" />`
-          : `<div style="width:52px;height:52px;border-radius:8px;background:#fce7f3;flex-shrink:0;display:grid;place-items:center;font-size:20px">🌾</div>`;
-        return `<div class="jp-det-card" style="scroll-snap-align:start;flex:0 0 100%;display:flex;gap:10px;align-items:center;padding:10px 12px">
+          ? `<div style="width:52px;height:52px;border-radius:8px;overflow:hidden;background:#fff1f2;flex:0 0 52px"><img src="${escapeHtml(d.image_path)}" style="display:block;width:52px;height:52px;max-width:52px;max-height:52px;object-fit:cover" /></div>`
+          : `<div style="width:52px;height:52px;border-radius:8px;background:#fff1f2;border:1.5px solid #fecaca;flex:0 0 52px;box-sizing:border-box"></div>`;
+        return `<div class="jp-det-card" style="scroll-snap-align:start;flex:0 0 100%;display:flex;gap:10px;align-items:center;padding:10px 12px;min-height:72px;box-sizing:border-box">
           ${img}
-          <div style="flex:1;min-width:0">
+          <div style="flex:1;min-width:0;overflow:hidden">
             <div style="font-size:12px;font-weight:800;color:#0f172a">${name}</div>
             <div style="font-size:10px;font-weight:600;color:#be123c;margin-top:1px">${cat}</div>
             ${confBar}
@@ -832,7 +857,7 @@ export function Maps() {
         .join("");
 
       detBody = `<div style="background:#fff1f2;border-radius:12px;overflow:hidden;margin-bottom:12px">
-        <div class="jp-det-slider" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory">
+        <div class="jp-det-slider" style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;max-height:76px">
           ${cards}
         </div>
         ${detections.length > 1 ? `<div class="jp-det-dots" style="display:flex;gap:4px;justify-content:center;padding:6px 0 10px">${dots}</div>` : ""}
@@ -853,15 +878,26 @@ export function Maps() {
       </div>
       <div style="${DIV}"></div>
       <div style="margin-bottom:14px">
-        <div style="${LBL};margin-bottom:7px">Chamber</div>
-        <div class="jp-chamber-dd" style="position:relative">
-          <div class="jp-chamber-trigger" style="width:100%;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:9px 36px 9px 12px;font-size:12px;font-weight:700;color:#0f172a;cursor:pointer;display:flex;align-items:center;box-sizing:border-box;position:relative">
-            <span class="jp-chamber-label">${chamber}</span>
-            <svg class="jp-chamber-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;right:11px;transition:transform .2s"><path d="m6 9 6 6 6-6"/></svg>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="${LBL}">Chamber</div>
+          <span class="jp-chamber-mode" style="background:#f8fafc;color:#64748b;border-radius:999px;padding:2px 8px;font-size:9px;font-weight:800;text-transform:uppercase">${chamberMode}</span>
+        </div>
+        <div class="jp-mode-dd" style="position:relative">
+          <button type="button" class="jp-mode-trigger" style="width:100%;height:38px;border:1.5px solid #e2e8f0;border-radius:11px;background:#fff;padding:0 36px 0 12px;font-size:12px;font-weight:850;color:#0f172a;cursor:pointer;text-align:left;box-sizing:border-box;position:relative">
+            <span class="jp-mode-label">${rawChamberMode === "manual" ? "Manual" : "Otomatis dari Deteksi"}</span>
+            <svg class="jp-mode-arrow" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);transition:transform .18s"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="jp-mode-menu" style="display:none;position:absolute;left:0;right:0;top:40px;z-index:120;background:#fff;border:1.5px solid #e11d48;border-radius:11px;overflow:hidden;box-shadow:0 12px 26px rgba(225,29,72,.14)">
+            <button type="button" class="jp-mode-opt" data-mode="auto" style="width:100%;border:none;background:${rawChamberMode === "manual" ? "#fff" : "#fff1f2"};color:${rawChamberMode === "manual" ? "#334155" : "#be123c"};padding:10px 12px;text-align:left;font-size:12px;font-weight:850;cursor:pointer">Otomatis dari Deteksi</button>
+            <button type="button" class="jp-mode-opt" data-mode="manual" style="width:100%;border:none;background:${rawChamberMode === "manual" ? "#fff1f2" : "#fff"};color:${rawChamberMode === "manual" ? "#be123c" : "#334155"};padding:10px 12px;text-align:left;font-size:12px;font-weight:850;cursor:pointer">Manual</button>
           </div>
-          <div class="jp-chamber-menu" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #e11d48;border-top:none;border-bottom-left-radius:10px;border-bottom-right-radius:10px;overflow:hidden;z-index:99;box-shadow:0 8px 20px rgba(225,29,72,.1)">
-            ${chamberOpts}
-          </div>
+        </div>
+        <div class="jp-chamber-auto-panel" style="display:${rawChamberMode === "manual" ? "none" : "block"};margin-top:9px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;padding:10px 12px">
+          <div style="font-size:11px;font-weight:850;color:#0f172a">${escapeHtml(autoStatus)}</div>
+          <div style="margin-top:3px;font-size:10px;font-weight:700;color:#94a3b8">${detections.length} hasil deteksi</div>
+        </div>
+        <div class="jp-chamber-manual-panel" style="display:${rawChamberMode === "manual" ? "block" : "none"};margin-top:9px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${chamberOpts}</div>
         </div>
       </div>
       <div style="${DIV}"></div>
@@ -908,50 +944,88 @@ export function Maps() {
       polygonLayer.closePopup();
     });
 
-    const trigger = el.querySelector(".jp-chamber-trigger");
-    const menu = el.querySelector(".jp-chamber-menu");
-    const arrow = el.querySelector(".jp-chamber-arrow");
-    const label = el.querySelector(".jp-chamber-label");
+    const modeLabel = el.querySelector(".jp-chamber-mode");
+    const autoPanel = el.querySelector(".jp-chamber-auto-panel");
+    const manualPanel = el.querySelector(".jp-chamber-manual-panel");
 
-    if (trigger && menu) {
-      trigger.addEventListener("click", () => {
-        const isOpen = menu.style.display !== "none";
-        menu.style.display = isOpen ? "none" : "block";
-        trigger.style.borderBottomLeftRadius = isOpen ? "10px" : "0";
-        trigger.style.borderBottomRightRadius = isOpen ? "10px" : "0";
-        trigger.style.borderColor = isOpen ? "#e2e8f0" : "#e11d48";
-        if (arrow) {
-          arrow.style.transform = isOpen ? "" : "rotate(180deg)";
-          arrow.setAttribute("stroke", isOpen ? "#94a3b8" : "#e11d48");
-        }
-      });
-
-      el.querySelectorAll(".jp-chamber-opt").forEach((opt) => {
-        opt.addEventListener("click", async () => {
-          const value = opt.dataset.value;
-          if (label) label.textContent = value;
-          menu.style.display = "none";
-          trigger.style.borderBottomLeftRadius = "10px";
-          trigger.style.borderBottomRightRadius = "10px";
-          trigger.style.borderColor = "#e2e8f0";
-          if (arrow) { arrow.style.transform = ""; arrow.setAttribute("stroke", "#94a3b8"); }
-          el.querySelectorAll(".jp-chamber-opt").forEach((o) => {
-            const dot = o.querySelector("span");
-            const active = o === opt;
-            o.style.color = active ? "#be123c" : "#334155";
-            o.style.background = active ? "#fff1f2" : "transparent";
-            if (dot) dot.style.background = active ? "#e11d48" : "#e2e8f0";
-          });
-          if (props?.id) {
-            await fetch(`/polygons/${props.id}/chamber`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chamber: value }),
-            }).catch(() => {});
-          }
-        });
+    function paintMode(mode) {
+      if (modeLabel) modeLabel.textContent = mode;
+      if (autoPanel) autoPanel.style.display = mode === "manual" ? "none" : "block";
+      if (manualPanel) manualPanel.style.display = mode === "manual" ? "block" : "none";
+      const modeLabelText = mode === "manual" ? "Manual" : "Otomatis dari Deteksi";
+      const modeValueLabel = el.querySelector(".jp-mode-label");
+      if (modeValueLabel) modeValueLabel.textContent = modeLabelText;
+      el.querySelectorAll(".jp-mode-opt").forEach((button) => {
+        const active = button.dataset.mode === (mode === "manual" ? "manual" : "auto");
+        button.style.background = active ? "#fff1f2" : "#fff";
+        button.style.color = active ? "#be123c" : "#334155";
       });
     }
+
+    function setPopupChamberState(next, mode = "manual") {
+      props.selected_chambers = next;
+      props.chamber_mode = mode;
+      paintMode(mode);
+      el.querySelectorAll(".jp-chamber-opt").forEach((button) => {
+        const active = next.includes(button.dataset.value);
+        button.style.borderColor = active ? "#fb7185" : "#e2e8f0";
+        button.style.background = active ? "#fff1f2" : "#fff";
+        button.style.color = active ? "#be123c" : "#334155";
+      });
+    }
+
+    const modeTrigger = el.querySelector(".jp-mode-trigger");
+    const modeMenu = el.querySelector(".jp-mode-menu");
+    const modeArrow = el.querySelector(".jp-mode-arrow");
+    modeTrigger?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!modeMenu) return;
+      const open = modeMenu.style.display !== "none";
+      modeMenu.style.display = open ? "none" : "block";
+      if (modeArrow) modeArrow.style.transform = open ? "translateY(-50%)" : "translateY(-50%) rotate(180deg)";
+    });
+
+    el.querySelectorAll(".jp-mode-opt").forEach((option) => {
+      option.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        if (modeMenu) modeMenu.style.display = "none";
+        if (modeArrow) modeArrow.style.transform = "translateY(-50%)";
+        const mode = option.dataset.mode;
+        if (mode === "manual") {
+          const current = Array.isArray(props?.selected_chambers) ? props.selected_chambers : [];
+          setPopupChamberState(current, "manual");
+          if (props?.id && current.length) {
+            const updated = await updateSprayTargetChambers(props.id, { mode: "manual", selected_chambers: current });
+            if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "manual");
+          }
+          return;
+        }
+        if (!props?.id) return;
+        setPopupChamberState(Array.isArray(props?.selected_chambers) ? props.selected_chambers : [], "auto");
+        const updated = await updateSprayTargetChambers(props.id, { mode: "auto" });
+        if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "auto");
+      });
+    });
+
+    el.querySelectorAll(".jp-chamber-opt").forEach((opt) => {
+      opt.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const value = opt.dataset.value;
+        let next = Array.isArray(props?.selected_chambers)
+          ? [...props.selected_chambers]
+          : [];
+        next = next.includes(value)
+          ? next.filter((item) => item !== value)
+          : [...next, value];
+        setPopupChamberState(next, next.length ? "manual" : "none");
+        if (props?.id) {
+          const updated = await updateSprayTargetChambers(props.id, next.length === 0
+            ? { mode: "none" }
+            : { mode: "manual", selected_chambers: next });
+          if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "none");
+        }
+      });
+    });
 
     const slider = el.querySelector(".jp-det-slider");
     if (slider) {
@@ -1112,6 +1186,7 @@ export function Maps() {
   async function loadSprayTargets(
     fieldId = selectedFieldId,
     imagery = selectedImagery,
+    options = {},
   ) {
     if (!fieldId || !imagery) return;
     setSprayTargetsLoading(true);
@@ -1123,11 +1198,56 @@ export function Maps() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || "Gagal memuat spray targets");
-      renderSprayTargetsGeoJson(data.geojson);
+      if (options.renderLayer === false) {
+        const features = Array.isArray(data.geojson?.features)
+          ? data.geojson.features
+          : [];
+        setSprayTargetFeatures(features);
+      } else {
+        renderSprayTargetsGeoJson(data.geojson);
+      }
     } catch (err) {
       setSprayTargetsError(err.message || "Gagal memuat spray targets");
     } finally {
       setSprayTargetsLoading(false);
+    }
+  }
+
+  async function updateSprayTargetChambers(targetId, payload) {
+    if (!targetId) return null;
+    setSprayTargetsError("");
+    try {
+      const res = await fetch(`/polygons/${targetId}/chambers`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data?.detail || "Gagal update chamber");
+      const patch = {
+        selected_chambers: data.selected_chambers || [],
+        chamber_mode: data.chamber_mode || "none",
+      };
+      const targetLayer = sprayTargetLayerIndex.current[String(targetId)];
+      if (targetLayer?.feature?.properties) {
+        Object.assign(targetLayer.feature.properties, patch);
+      }
+      setSprayTargetFeatures((features) => features.map((feature) => {
+        const id = feature.properties?.id ?? feature.properties?.zone_code;
+        if (String(id) !== String(targetId)) return feature;
+        return {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            ...patch,
+          },
+        };
+      }));
+      return data;
+    } catch (err) {
+      setSprayTargetsError(err.message || "Gagal update chamber");
+      return null;
     }
   }
 
@@ -1467,9 +1587,13 @@ export function Maps() {
     (sum, feature) => sum + Number(feature.properties?.area_m2 || 0),
     0,
   );
-  const sprayReadyCount = sprayTargetFeatures.filter(
-    (feature) => feature.properties?.chamber !== "none",
-  ).length;
+  const missingSprayTargetZones = sprayTargetFeatures
+    .filter((feature) => {
+      const selectedChambers = feature.properties?.selected_chambers;
+      return !Array.isArray(selectedChambers) || selectedChambers.length === 0;
+    })
+    .map((feature, index) => feature.properties?.zone_code ?? `Z${String(index + 1).padStart(2, "0")}`);
+  const sprayReadyCount = sprayTargetFeatures.length - missingSprayTargetZones.length;
   const routeWaypointCount = sprayTargetFeatures.length > 0 ? sprayTargetFeatures.length * 4 : 0;
   const shouldFillFieldPanel = ndviZoneFeatures.length > 0 || routeActive;
   const activeLayerPanels = [
@@ -1765,6 +1889,7 @@ export function Maps() {
                 targetCount={sprayTargetFeatures.length}
                 waypointCount={routeWaypointCount}
                 readyCount={sprayReadyCount}
+                missingZones={missingSprayTargetZones}
                 altitude={routeAltitude}
                 speed={routeSpeed}
                 onAltitudeChange={setRouteAltitude}

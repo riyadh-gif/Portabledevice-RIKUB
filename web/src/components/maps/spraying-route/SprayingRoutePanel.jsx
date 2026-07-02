@@ -39,6 +39,7 @@ export function SprayingRoutePanel({
   targetCount,
   waypointCount,
   readyCount,
+  missingZones = [],
   altitude,
   speed,
   onAltitudeChange,
@@ -46,6 +47,8 @@ export function SprayingRoutePanel({
   onClose,
   onOpenTargets,
 }) {
+  const routeReady = targetCount > 0 && missingZones.length === 0;
+
   return (
     <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-3">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -108,6 +111,24 @@ export function SprayingRoutePanel({
             />
           </div>
 
+          {missingZones.length > 0 && (
+            <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-rose-700">
+                Chamber belum lengkap
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-snug text-rose-800">
+                Lengkapi chamber untuk {missingZones.join(", ")} sebelum generate route.
+              </div>
+              <button
+                type="button"
+                onClick={onOpenTargets}
+                className="mt-2 h-8 rounded-lg bg-white px-3 text-[10px] font-black text-rose-700 ring-1 ring-rose-200 transition-colors hover:bg-rose-100"
+              >
+                Buka Spray Targets
+              </button>
+            </div>
+          )}
+
           <div className="mt-2 rounded-xl border border-gray-200 bg-white p-2.5">
             <div className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
               Flight Settings
@@ -135,7 +156,13 @@ export function SprayingRoutePanel({
           <div className="mt-2 grid gap-2">
             <button
               type="button"
-              className="flex h-10 items-center justify-center rounded-xl bg-forest px-4 text-[12px] font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] transition-colors hover:bg-house"
+              disabled={!routeReady}
+              className={`flex h-10 items-center justify-center rounded-xl px-4 text-[12px] font-black transition-colors ${
+                routeReady
+                  ? "bg-forest text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] hover:bg-house"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+              title={routeReady ? "Generate route" : "Lengkapi chamber semua target dulu"}
             >
               Generate Route
             </button>

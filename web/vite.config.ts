@@ -18,6 +18,8 @@ export default defineConfig({
     proxy: {
       '/fields': { target: 'http://localhost:8000', changeOrigin: true },
       '/imagery': { target: 'http://localhost:8000', changeOrigin: true },
+      '/polygons': { target: 'http://localhost:8000', changeOrigin: true },
+      '/detections': { target: 'http://localhost:8000', changeOrigin: true },
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },

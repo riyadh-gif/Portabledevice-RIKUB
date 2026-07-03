@@ -2,7 +2,7 @@
 
 Tujuan: `web/` Vite tetap memakai `fetch("/api/...")`, sedangkan `server/`
 FastAPI meneruskan request itu ke backend gRPC JSON-over-gRPC di
-`10.7.101.152:50051`.
+`192.0.2.10:50051`.
 
 ## Keputusan Utama
 
@@ -13,7 +13,7 @@ Alur final:
 ```text
 Vite frontend
   -> HTTP /api/... ke FastAPI
-  -> gRPC JSON-over-gRPC ke 10.7.101.152:50051
+  -> gRPC JSON-over-gRPC ke 192.0.2.10:50051
   -> Soerogis backend
 ```
 
@@ -71,7 +71,7 @@ di atas.
 Tambahkan env server:
 
 ```env
-BACKEND_GRPC_ADDR=10.7.101.152:50051
+BACKEND_GRPC_ADDR=192.0.2.10:50051
 FILE_SERVER_BASE_URL=
 METERS_PER_PIXEL=0.05
 ```
@@ -79,7 +79,7 @@ METERS_PER_PIXEL=0.05
 Default kalau env kosong:
 
 ```text
-BACKEND_GRPC_ADDR=10.7.101.152:50051
+BACKEND_GRPC_ADDR=192.0.2.10:50051
 METERS_PER_PIXEL=0.05
 ```
 
@@ -162,8 +162,8 @@ drone_addr_from_request(request: Request) -> str
 
 Aturan:
 
-- boleh input `10.7.101.152:50051`,
-- boleh input `http://10.7.101.152:50051`,
+- boleh input `192.0.2.10:50051`,
+- boleh input `http://192.0.2.10:50051`,
 - hapus scheme dan path,
 - kalau port kosong, default `50051`,
 - kalau invalid, fallback ke `BACKEND_GRPC_ADDR`.
@@ -201,7 +201,7 @@ Endpoint:
 
 ```json
 {
-  "defaultDroneAddr": "10.7.101.152:50051"
+  "defaultDroneAddr": "192.0.2.10:50051"
 }
 ```
 
@@ -420,8 +420,8 @@ npm run dev
 Buat minimal self-check untuk helper alamat:
 
 ```text
-sanitize_grpc_addr("http://10.7.101.152:50051/x") == "10.7.101.152:50051"
-sanitize_grpc_addr("10.7.101.152") == "10.7.101.152:50051"
+sanitize_grpc_addr("http://192.0.2.10:50051/x") == "192.0.2.10:50051"
+sanitize_grpc_addr("192.0.2.10") == "192.0.2.10:50051"
 sanitize_grpc_addr("") is None
 ```
 

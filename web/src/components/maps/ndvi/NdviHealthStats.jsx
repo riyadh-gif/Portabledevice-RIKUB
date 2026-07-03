@@ -1,8 +1,9 @@
 import { Sprout } from "lucide-react";
 
-export function NdviHealthStats({ stats, categories, dominant }) {
+export function NdviHealthStats({ stats, categories, dominant, panelSwitch }) {
   return (
     <div className="absolute right-4 top-[208px] z-[1000] w-[min(314px,calc(100vw-32px))] lg:right-20 lg:top-4">
+      {panelSwitch && <div className="mb-2 flex justify-end">{panelSwitch}</div>}
       <div className="max-h-[calc(100dvh-160px)] overflow-y-auto overscroll-contain rounded-[20px] border border-white/70 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.18)] backdrop-blur lg:max-h-[calc(100dvh-88px)]">
         <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-lime-700 px-4 pb-3 pt-3 text-white">
           <div className="flex items-start justify-between gap-3">

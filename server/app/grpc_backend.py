@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import grpc
 from fastapi import HTTPException, Request
 
-BACKEND_GRPC_ADDR = os.getenv("BACKEND_GRPC_ADDR", "10.7.101.152:50051")
+BACKEND_GRPC_ADDR = os.getenv("BACKEND_GRPC_ADDR")
 FILE_SERVER_BASE_URL = os.getenv("FILE_SERVER_BASE_URL")
 DEFAULT_GRPC_PORT = "50051"
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
@@ -108,13 +108,3 @@ def normalize_session(job: dict[str, Any]) -> dict[str, Any]:
             "clusters_kml": reachable_artifact_url(artifacts.get("clusters_kml")),
         },
     }
-
-
-def _demo() -> None:
-    assert sanitize_grpc_addr("http://10.7.101.152:50051/x") == "10.7.101.152:50051"
-    assert sanitize_grpc_addr("10.7.101.152") == "10.7.101.152:50051"
-    assert sanitize_grpc_addr("") is None
-
-
-if __name__ == "__main__":
-    _demo()

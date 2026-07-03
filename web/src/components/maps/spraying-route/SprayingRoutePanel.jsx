@@ -1,4 +1,4 @@
-import { Layers, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Layers, X } from "lucide-react";
 
 function Stat({ label, value, tone = "text-forest" }) {
   return (
@@ -13,24 +13,98 @@ function Stat({ label, value, tone = "text-forest" }) {
   );
 }
 
-function NumberInput({ label, value, min, step, unit, onChange }) {
+// ponytail: rounds to the step's decimal precision so repeated +/- clicks
+// never drift into floating-point noise (e.g. 4.2 + 0.1 -> 4.200000000000003).
+function roundToStep(value, step) {
+  const decimals = (String(step).split(".")[1] || "").length;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+export function NumberInput({ label, value, min, max, step, unit, onChange }) {
+  const stepSize = Number(step) || 1;
+  const minValue = Number(min) || 0;
+  const maxValue = max !== undefined ? Number(max) : Infinity;
+
   return (
     <label className="block">
-      <span className="block text-[8px] font-black uppercase tracking-[0.1em] text-gray-400">
+      <span className="block text-[7px] font-bold uppercase tracking-[0.1em] text-slate-400">
         {label}
       </span>
-      <div className="mt-0.5 flex h-9 items-center rounded-xl border border-gray-200 bg-gray-50 px-2 focus-within:border-forest">
+      <div className="mt-0.5 flex h-7 items-center rounded-lg border border-white/10 bg-white/5 pl-1.5 focus-within:border-emerald-300/60">
         <input
           type="number"
           min={min}
+          max={max}
           step={step}
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
-          className="min-w-0 flex-1 bg-transparent text-center text-[14px] font-black tabular-nums text-gray-900 outline-none"
+          className="min-w-0 flex-1 bg-transparent text-center text-[12px] font-semibold tabular-nums text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
-        <span className="text-[10px] font-bold text-gray-400">{unit}</span>
+        <span className="pr-1 text-[9px] font-medium text-slate-400">{unit}</span>
+        <div className="flex h-full flex-col border-l border-white/10">
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => onChange(roundToStep(Math.min(maxValue, value + stepSize), step))}
+            className="flex h-1/2 w-4 items-center justify-center text-slate-400 transition-colors hover:text-emerald-300"
+          >
+            <ChevronUp className="h-2.5 w-2.5" />
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => onChange(roundToStep(Math.max(minValue, value - stepSize), step))}
+            className="flex h-1/2 w-4 items-center justify-center border-t border-white/10 text-slate-400 transition-colors hover:text-emerald-300"
+          >
+            <ChevronDown className="h-2.5 w-2.5" />
+          </button>
+        </div>
       </div>
     </label>
+  );
+}
+
+export function ReadonlyField({ label, value, hint }) {
+  return (
+    <div className="block">
+      <span className="block text-[7px] font-bold uppercase tracking-[0.1em] text-slate-400">
+        {label}
+      </span>
+      <div className="mt-0.5 flex h-7 items-center justify-center rounded-lg border border-white/5 bg-white/5 px-1.5">
+        <span className="text-[12px] font-semibold tabular-nums text-slate-100">{value}</span>
+      </div>
+      {hint && (
+        <span className="mt-0.5 block truncate text-center text-[7px] font-medium text-slate-400">
+          {hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ChamberGroupRow({ group }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-2.5 py-2 last:border-b-0">
+      <div className="min-w-0">
+        <div className="flex flex-wrap gap-1">
+          {group.chambers.map((chamber) => (
+            <span
+              key={chamber}
+              className="rounded-full bg-rose-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.06em] text-rose-700 ring-1 ring-rose-200"
+            >
+              {chamber}
+            </span>
+          ))}
+        </div>
+        <div className="mt-1 truncate text-[10px] font-semibold text-gray-500">
+          {group.zoneCodes.join(", ")}
+        </div>
+      </div>
+      <div className="shrink-0 text-right text-[10px] font-black tabular-nums text-gray-700">
+        {group.sprayWidth.toFixed(1)}m &middot; {group.laneSpacing.toFixed(1)}m
+      </div>
+    </div>
   );
 }
 
@@ -40,15 +114,11 @@ export function SprayingRoutePanel({
   waypointCount,
   readyCount,
   missingZones = [],
-  altitude,
-  speed,
-  onAltitudeChange,
-  onSpeedChange,
+  groups = [],
+  laneSpacingInvalid,
   onClose,
   onOpenTargets,
 }) {
-  const routeReady = targetCount > 0 && missingZones.length === 0;
-
   return (
     <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-3">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -129,61 +199,45 @@ export function SprayingRoutePanel({
             </div>
           )}
 
-          <div className="mt-2 rounded-xl border border-gray-200 bg-white p-2.5">
-            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
-              Flight Settings
+          {missingZones.length === 0 && laneSpacingInvalid && (
+            <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-rose-700">
+                Lane spacing terlalu lebar
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-snug text-rose-800">
+                Lane spacing melebihi spray width. Area bisa tidak tersemprot.
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <NumberInput
-                label="Altitude"
-                min="1"
-                step="0.5"
-                value={altitude}
-                unit="m"
-                onChange={(value) => onAltitudeChange(Math.max(1, value || 1))}
-              />
-              <NumberInput
-                label="Speed"
-                min="0.5"
-                step="0.5"
-                value={speed}
-                unit="m/s"
-                onChange={(value) => onSpeedChange(Math.max(0.5, value || 0.5))}
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="mt-2 grid gap-2">
+          {groups.length > 0 && (
+            <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <div className="border-b border-gray-100 bg-gray-50 px-2.5 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-gray-500">
+                Chamber Groups
+              </div>
+              {groups.map((group) => (
+                <ChamberGroupRow key={group.key} group={group} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={!routeReady}
-              className={`flex h-10 items-center justify-center rounded-xl px-4 text-[12px] font-black transition-colors ${
-                routeReady
-                  ? "bg-forest text-white shadow-[0_10px_20px_rgba(0,98,65,0.18)] hover:bg-house"
-                  : "bg-gray-100 text-gray-400"
-              }`}
-              title={routeReady ? "Generate route" : "Lengkapi chamber semua target dulu"}
+              disabled
+              className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
+              title="Belum terhubung ke backend drone"
             >
-              Generate Route
+              Upload Mission
             </button>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled
-                className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
-                title="Belum terhubung ke backend drone"
-              >
-                Upload Mission
-              </button>
-              <button
-                type="button"
-                disabled
-                className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
-                title="Belum terhubung ke backend drone"
-              >
-                Execute
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled
+              className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 px-3 text-[11px] font-black text-gray-400"
+              title="Belum terhubung ke backend drone"
+            >
+              Execute
+            </button>
           </div>
         </>
       )}

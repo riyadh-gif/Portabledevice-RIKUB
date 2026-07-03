@@ -22,7 +22,7 @@ import {
 import { DroneFloatingButton } from "@/components/maps/drone/DroneFloatingButton";
 import { DroneTelemetryBar } from "@/components/maps/drone/DroneTelemetryBar";
 import { DroneTelemetryProvider } from "@/components/gcs/DroneTelemetryProvider";
-import { diagnosticsCoords, useDiagnostics } from "@/lib/gcs/diagnostics";
+import { diagnosticsCoords, headingDeg, useDiagnostics } from "@/lib/gcs/diagnostics";
 import { LayerPanel } from "@/components/maps/layers/LayerPanel";
 import { MapFloatingControls } from "@/components/maps/MapFloatingControls";
 import { createLocationMarker } from "@/components/maps/locationPopup";
@@ -30,6 +30,8 @@ import { NdviHealthStats } from "@/components/maps/ndvi/NdviHealthStats";
 import { NdviZonesPanel } from "@/components/maps/ndvi/NdviZonesPanel";
 import { SprayTargetsPanel } from "@/components/maps/spray-targets/SprayTargetsPanel";
 import { SprayingRoutePanel } from "@/components/maps/spraying-route/SprayingRoutePanel";
+import { FlightSettingsWidget } from "@/components/maps/spraying-route/FlightSettingsWidget";
+import { computeChamberGroups, defaultLaneSpacing } from "@/lib/gcs/chamber-groups";
 import {
   BASE_BOUNDS,
   BASE_LAYERS,
@@ -42,6 +44,15 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   shadowUrl: markerShadow,
 });
+
+function droneMarkerIcon(rotationDeg) {
+  return L.divIcon({
+    className: "",
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    html: `<div style="position:relative;width:44px;height:44px"><span style="position:absolute;left:50%;top:50%;width:40px;height:40px;margin-left:-20px;margin-top:-20px;border-radius:9999px;background:rgba(0,91,179,0.24);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite"></span><span style="position:absolute;left:50%;top:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:9999px;background:rgba(0,91,179,0.20);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite;animation-delay:1.2s"></span><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" style="position:absolute;left:50%;top:50%;margin-left:-13px;margin-top:-13px;filter:drop-shadow(0 4px 8px rgba(0,41,82,0.5));transform:rotate(${rotationDeg}deg)"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="#005bb3" stroke="white" stroke-width="1"/></svg></div>`,
+  });
+}
 
 export function Maps() {
   const navigate = useNavigate();
@@ -94,7 +105,8 @@ export function Maps() {
   const [sprayTargetFeatures, setSprayTargetFeatures] = useState([]);
   const [activeAnalysisPanel, setActiveAnalysisPanel] = useState("ndvi-zones");
   const [routeAltitude, setRouteAltitude] = useState(5);
-  const [routeSpeed, setRouteSpeed] = useState(2);
+  const [routeLaneSpacing, setRouteLaneSpacing] = useState(() => defaultLaneSpacing(5));
+  const [topRightTab, setTopRightTab] = useState("ndvi");
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [telemetryCollapsed, setTelemetryCollapsed] = useState(false);
 
@@ -1418,21 +1430,7 @@ export function Maps() {
       alert("Lokasi drone belum tersedia dari telemetry.");
       return;
     }
-
-    const latlng = [coords.lat, coords.lon];
-    if (droneLocationMarker.current) {
-      map.current.removeLayer(droneLocationMarker.current);
-    }
-
-    const icon = L.divIcon({
-      className: "",
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-      html: '<div style="position:relative;width:44px;height:44px"><span style="position:absolute;left:50%;top:50%;width:40px;height:40px;margin-left:-20px;margin-top:-20px;border-radius:9999px;background:rgba(0,91,179,0.24);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite"></span><span style="position:absolute;left:50%;top:50%;width:28px;height:28px;margin-left:-14px;margin-top:-14px;border-radius:9999px;background:rgba(0,91,179,0.20);animation:ping 2.4s cubic-bezier(0,0,0.2,1) infinite;animation-delay:1.2s"></span><svg width="38" height="38" viewBox="-19 -19 38 38" aria-hidden="true" style="position:absolute;left:50%;top:50%;margin-left:-19px;margin-top:-19px;filter:drop-shadow(0 7px 12px rgba(0,41,82,0.45))"><path d="M0,-14 L10,12 L0,6 L-10,12 Z" fill="#005bb3" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg></div>',
-    });
-
-    droneLocationMarker.current = L.marker(latlng, { icon, interactive: false }).addTo(map.current);
-    map.current.flyTo(latlng, 17, { duration: 1 });
+    map.current.flyTo([coords.lat, coords.lon], 17, { duration: 1 });
   }
 
   function locateUser() {
@@ -1529,8 +1527,29 @@ export function Maps() {
       sprayTargetsLayer.current = null;
       imageryCache.current = {};
       fieldLocationMarker.current = null;
+      droneLocationMarker.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!map.current) return;
+    const coords = diagnosticsCoords(diagnosticsData);
+    if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lon)) return;
+
+    const heading = headingDeg(diagnosticsData);
+    // ponytail: lucide's Plane icon points ~45deg (northeast) at rest; this
+    // offset aligns it to true heading. Tune visually if it looks off.
+    const rotation = heading != null ? heading - 45 : 0;
+    const icon = droneMarkerIcon(rotation);
+    const latlng = [coords.lat, coords.lon];
+
+    if (droneLocationMarker.current) {
+      droneLocationMarker.current.setLatLng(latlng);
+      droneLocationMarker.current.setIcon(icon);
+    } else {
+      droneLocationMarker.current = L.marker(latlng, { icon, interactive: false }).addTo(map.current);
+    }
+  }, [diagnosticsData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1595,6 +1614,52 @@ export function Maps() {
     .map((feature, index) => feature.properties?.zone_code ?? `Z${String(index + 1).padStart(2, "0")}`);
   const sprayReadyCount = sprayTargetFeatures.length - missingSprayTargetZones.length;
   const routeWaypointCount = sprayTargetFeatures.length > 0 ? sprayTargetFeatures.length * 4 : 0;
+  const chamberGroups = computeChamberGroups({
+    features: sprayTargetFeatures,
+    altitude: routeAltitude,
+    laneSpacingInput: routeLaneSpacing,
+  });
+  const routeReady =
+    sprayTargetFeatures.length > 0 &&
+    missingSprayTargetZones.length === 0 &&
+    !chamberGroups.laneSpacingInvalid;
+  const ndviStatsVisible = active.has("ndvi");
+  const topRightConflict = ndviStatsVisible && routeActive;
+  const showNdviStats = ndviStatsVisible && (!topRightConflict || topRightTab === "ndvi");
+  const showFlightSettings = routeActive && (!topRightConflict || topRightTab === "flight");
+
+  function renderTopRightSwitch() {
+    if (!topRightConflict) return null;
+    const tabs = [
+      { id: "ndvi", label: "NDVI" },
+      { id: "flight", label: "Flight" },
+    ];
+    return (
+      <div className="flex shrink-0 rounded-2xl bg-white/95 p-0.5 shadow-[0_8px_20px_rgba(15,23,42,0.16)] ring-1 ring-gray-200 backdrop-blur">
+        {tabs.map((tab) => {
+          const isActive = topRightTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setTopRightTab(tab.id)}
+              className={`h-6 rounded-xl px-2.5 text-[9px] font-black uppercase tracking-[0.06em] transition-colors ${
+                isActive
+                  ? "bg-emerald-900 text-white shadow-sm"
+                  : "text-gray-400 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  function handleRouteAltitudeChange(nextAltitude) {
+    setRouteAltitude(nextAltitude);
+    setRouteLaneSpacing(defaultLaneSpacing(nextAltitude));
+  }
   const shouldFillFieldPanel = ndviZoneFeatures.length > 0 || routeActive;
   const activeLayerPanels = [
     { id: "ndvi-zones", label: "NDVI Zones" },
@@ -1890,10 +1955,8 @@ export function Maps() {
                 waypointCount={routeWaypointCount}
                 readyCount={sprayReadyCount}
                 missingZones={missingSprayTargetZones}
-                altitude={routeAltitude}
-                speed={routeSpeed}
-                onAltitudeChange={setRouteAltitude}
-                onSpeedChange={setRouteSpeed}
+                groups={chamberGroups.groups}
+                laneSpacingInvalid={chamberGroups.laneSpacingInvalid}
                 onClose={() => toggleAnalysisLayer("spraying-route")}
                 onOpenTargets={() => {
                   if (!active.has("spray-targets")) {
@@ -1910,11 +1973,12 @@ export function Maps() {
         )}
 
         {/* NDVI Health Stats */}
-        {active.has("ndvi") && (
+        {showNdviStats && (
           <NdviHealthStats
             stats={ndviStats}
             categories={ndviCategories}
             dominant={dominantNdvi}
+            panelSwitch={renderTopRightSwitch()}
           />
         )}
 
@@ -1922,6 +1986,19 @@ export function Maps() {
           <DroneTelemetryBar
             collapsed={telemetryCollapsed}
             onToggle={() => setTelemetryCollapsed((collapsed) => !collapsed)}
+          />
+        )}
+
+        {showFlightSettings && (
+          <FlightSettingsWidget
+            altitude={routeAltitude}
+            laneSpacing={routeLaneSpacing}
+            sprayWidth={chamberGroups.sprayWidthFull}
+            overlapPercent={chamberGroups.overlapPercent}
+            onAltitudeChange={handleRouteAltitudeChange}
+            onLaneSpacingChange={setRouteLaneSpacing}
+            routeReady={routeReady}
+            panelSwitch={renderTopRightSwitch()}
           />
         )}
 

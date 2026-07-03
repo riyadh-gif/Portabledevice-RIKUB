@@ -1,7 +1,7 @@
 # Implementasi gRPC di FastAPI Server
 
 Dokumen ini menjelaskan struktur implementasi gRPC untuk menghubungkan `web/`
-Vite ke backend Soerogis gRPC di `10.7.101.152:50051`.
+Vite ke backend Soerogis gRPC di `192.0.2.10:50051`.
 
 ## Arsitektur
 
@@ -10,7 +10,7 @@ web/ Vite
   -> fetch("/api/...")
   -> server/ FastAPI
   -> JSON-over-gRPC
-  -> 10.7.101.152:50051
+  -> 192.0.2.10:50051
 ```
 
 Browser tidak memanggil gRPC langsung. FastAPI menjadi BFF/proxy agar frontend
@@ -54,7 +54,7 @@ tidak memakai `.proto` di frontend lama.
 Server memakai env:
 
 ```env
-BACKEND_GRPC_ADDR=10.7.101.152:50051
+BACKEND_GRPC_ADDR=192.0.2.10:50051
 FILE_SERVER_BASE_URL=
 METERS_PER_PIXEL=0.05
 ```
@@ -62,7 +62,7 @@ METERS_PER_PIXEL=0.05
 Default:
 
 ```text
-BACKEND_GRPC_ADDR=10.7.101.152:50051
+BACKEND_GRPC_ADDR=192.0.2.10:50051
 METERS_PER_PIXEL=0.05
 ```
 
@@ -81,7 +81,7 @@ from urllib.parse import urlparse, urlunparse
 import grpc
 from fastapi import HTTPException, Request
 
-BACKEND_GRPC_ADDR = os.getenv("BACKEND_GRPC_ADDR", "10.7.101.152:50051")
+BACKEND_GRPC_ADDR = os.getenv("BACKEND_GRPC_ADDR")
 FILE_SERVER_BASE_URL = os.getenv("FILE_SERVER_BASE_URL")
 DEFAULT_GRPC_PORT = "50051"
 
@@ -141,8 +141,8 @@ Tambahkan self-check kecil di bawah file:
 
 ```python
 def _demo():
-    assert sanitize_grpc_addr("http://10.7.101.152:50051/x") == "10.7.101.152:50051"
-    assert sanitize_grpc_addr("10.7.101.152") == "10.7.101.152:50051"
+    assert sanitize_grpc_addr("http://192.0.2.10:50051/x") == "192.0.2.10:50051"
+    assert sanitize_grpc_addr("192.0.2.10") == "192.0.2.10:50051"
     assert sanitize_grpc_addr("") is None
 
 

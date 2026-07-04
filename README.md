@@ -92,6 +92,35 @@ SQLAlchemy
 Package transitif seperti `starlette`, `pydantic`, `greenlet`, dan lainnya akan
 dipasang otomatis oleh `pip`.
 
+## Menambahkan Lahan (Field) Baru
+
+Belum ada form "tambah lahan" di UI — field baru dibuat otomatis lewat endpoint
+registrasi imagery di `server/app/routes/fields.py`.
+
+1. Siapkan GeoTIFF RGB dan NDVI hasil mapping, taruh di dalam
+   `server/storage/imagery/<nama-lahan>/...` (path harus relatif ke `server/`,
+   tidak boleh path absolut).
+2. Panggil:
+
+   ```bash
+   curl -X POST http://localhost:8000/imagery/register \
+     -H "Content-Type: application/json" \
+     -d '{
+       "field_name": "Sawah Blok Baru",
+       "rgb_tif_path": "storage/imagery/sawah-baru/2026-07-04/rgb.tif",
+       "ndvi_tif_path": "storage/imagery/sawah-baru/2026-07-04/ndvi.tif",
+       "capture_at": "2026-07-04T09:00:00+07:00"
+     }'
+   ```
+
+3. Kalau `field_name` belum ada di database, field baru otomatis dibuat.
+   Endpoint ini juga generate PNG dari kedua GeoTIFF dan hitung NDVI stats.
+4. Buka `/maps` — lahan baru langsung muncul di dropdown pemilih lahan.
+
+Kalau datanya masih foto mentah drone (belum di-stitch jadi orthophoto),
+proses dulu lewat Mapping (`/drone-dashboard/mapping`) sebelum didaftarkan ke
+`/imagery/register`.
+
 ## Database
 
 Target database project ini adalah PostgreSQL, dengan SQLAlchemy sebagai ORM

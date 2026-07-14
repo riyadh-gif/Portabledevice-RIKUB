@@ -114,13 +114,14 @@ def auto_chambers_from_detections(polygon: SprayPolygon) -> list[str]:
 def detection_to_dict(detection: TargetDetection) -> dict:
     return {
         "id": str(detection.id),
-        "polygon_id": str(detection.polygon_id),
+        "polygon_id": str(detection.polygon_id) if detection.polygon_id else None,
         "disease_name": detection.disease_name,
         "confidence": detection.confidence,
         "sample_lat": detection.sample_lat,
         "sample_lng": detection.sample_lng,
         "chamber": detection.chamber,
         "image_path": detection.image_path,
+        "soil_snapshot": detection.soil_snapshot,
         "created_at": detection.created_at.isoformat()
         if detection.created_at
         else None,

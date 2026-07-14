@@ -170,6 +170,13 @@
   #root {
     height: 100%;
   }
+  #root {
+    /* Shrunk by VirtualKeyboard while it's open (see component) so h-full/
+       flex page layouts reflow upward and the focused field - usually
+       pinned to the bottom - lands above the keyboard instead of under it. */
+    height: calc(100% - var(--keyboard-height, 0px));
+    transition: height 0.15s ease-out;
+  }
   body {
     margin: 0;
     background: hsl(var(--background));
@@ -400,4 +407,47 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* On-screen keyboard: dark neutral theme, shared across the leaf/forest
+   consumer pages and the blue gcs-primary drone-dashboard pages alike, since
+   it's a system-level control rather than themed page content. */
+.virtual-keyboard-theme.simple-keyboard {
+  background: transparent;
+  padding: 0;
+  touch-action: manipulation;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-row {
+  margin-bottom: 6px;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-row:last-child {
+  margin-bottom: 0;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-button {
+  height: 44px;
+  border-radius: 8px;
+  background: #33383a;
+  color: #f2f0eb;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid #16181a;
+  font-size: 15px;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-button:active {
+  background: #45babe1a;
+  transform: translateY(1px);
+  border-bottom-width: 1px;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-button-bksp,
+.virtual-keyboard-theme.simple-keyboard .hg-button-enter,
+.virtual-keyboard-theme.simple-keyboard .hg-button-shift,
+.virtual-keyboard-theme.simple-keyboard .hg-button-numbers,
+.virtual-keyboard-theme.simple-keyboard .hg-button-abc {
+  background: #26292a;
+  flex-grow: 1.5;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-button-enter {
+  background: #00754a;
+}
+.virtual-keyboard-theme.simple-keyboard .hg-button-space {
+  flex-grow: 5;
 }

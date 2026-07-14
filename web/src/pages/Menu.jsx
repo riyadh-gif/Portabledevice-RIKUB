@@ -1,7 +1,44 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPinned, Bot, ScanSearch, ArrowRight, Layers, Image as ImageIcon, Cpu } from 'lucide-react';
+import { MapPinned, Bot, ScanSearch, ArrowRight, Layers, Image as ImageIcon, Cpu, LogOut, Wheat } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+
+// Only meaningful inside the pywebview kiosk (webview_launcher.py exposes
+// this bridge for the Esc-to-exit shortcut) - hidden entirely when the app
+// is opened in a regular browser over LAN/Tailscale, where there is no
+// window to close and no navigator.geolocation-style kiosk API to call.
+// pywebview injects window.pywebview.api asynchronously, well after React's
+// first render; its 'pywebviewready' event is prone to firing before this
+// component's listener is attached (lost event), so poll briefly instead -
+// simpler and race-free.
+function ExitKioskButton() {
+  const [ready, setReady] = useState(() => !!window.pywebview?.api?.exit_app);
+
+  useEffect(() => {
+    if (ready) return;
+    const id = setInterval(() => {
+      if (window.pywebview?.api?.exit_app) {
+        setReady(true);
+        clearInterval(id);
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, [ready]);
+
+  if (!ready) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => window.pywebview.api.exit_app()}
+      className="text-muted-foreground hover:text-destructive"
+    >
+      <LogOut className="h-4 w-4" /> Keluar
+    </Button>
+  );
+}
 
 const ACCENTS = {
   forest: { text: 'text-forest', chip: 'bg-forest/10 text-forest', top: 'border-t-forest' },
@@ -18,13 +55,13 @@ const CARDS = [
   },
   {
     to: '/chatbot', accent: 'leaf', Icon: Bot, tag: 'Asisten AI',
-    cover: '/data/cover/chatbot.jpg', objPos: '72% 26%', title: 'Chatbot AI', subtitle: 'Asisten Cerdas', online: false,
+    cover: '/data/cover/chatbot.jpg', objPos: '72% 26%', title: 'Chatbot AI', subtitle: 'Asisten Cerdas', online: true,
     desc: 'Konsultasi pertanian & analisis parameter sawah.',
-    stats: [{ Icon: Cpu, label: 'model offline' }],
+    stats: [{ Icon: Cpu, label: 'model aktif' }],
   },
   {
     to: '/detection', accent: 'harvest', Icon: ScanSearch, tag: 'Computer Vision',
-    cover: '/data/cover/detection.jpg', objPos: '50% 45%', title: 'Deteksi Penyakit', subtitle: 'Klasifikasi Penyakit Daun', online: false,
+    cover: '/data/cover/detection.jpg', objPos: '50% 45%', title: 'Deteksi Penyakit', subtitle: 'Klasifikasi Penyakit Daun', online: true,
     desc: 'Identifikasi penyakit padi dari citra daun.',
     stats: [{ Icon: ScanSearch, label: 'terakhir: —' }],
   },
@@ -138,12 +175,13 @@ export function Menu() {
     <div className="flex h-full flex-col gap-4 bg-background px-[clamp(20px,4vw,48px)] py-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3.5">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-3xl shadow-[0_0_0.5px_rgba(0,0,0,0.14),0_1px_1px_rgba(0,0,0,0.24)]">🌾</span>
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white shadow-[0_0_0.5px_rgba(0,0,0,0.14),0_1px_1px_rgba(0,0,0,0.24)]"><Wheat className="h-7 w-7 text-forest" /></span>
           <div>
             <h1 className="text-2xl font-bold leading-none text-forest">Jaga Padi</h1>
             <p className="mt-1 text-xs font-semibold uppercase tracking-[1.5px] text-muted-foreground">Smart Rice Field Monitoring</p>
           </div>
         </div>
+        <ExitKioskButton />
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[1.5fr_1fr] md:grid-rows-2">

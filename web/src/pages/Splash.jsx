@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Wheat } from 'lucide-react';
 
 function Sprout({ className, style }) {
   // Small sprout standing on the track (base at bottom of the viewBox).
@@ -43,7 +44,7 @@ const STEPS = [
   { at: 30, text: 'Memuat peta sawah…' },
   { at: 60, text: 'Menghubungkan sensor…' },
   { at: 85, text: 'Hampir siap…' },
-  { at: 100, text: 'Siap! 🌾' },
+  { at: 100, text: 'Siap!' },
 ];
 
 export function Splash() {
@@ -72,7 +73,7 @@ export function Splash() {
       <div className="w-[min(640px,84vw)] px-6">
         {/* wordmark */}
         <div className="mb-9 flex flex-col items-center gap-1.5">
-          <span className="text-4xl">🌾</span>
+          <Wheat className="h-11 w-11 text-forest" strokeWidth={2} />
           <h1 className="text-3xl font-bold tracking-tight text-forest">Jaga Padi</h1>
           <p className="text-[11px] font-semibold uppercase tracking-[2px] text-muted-foreground">Smart Rice Field Monitoring</p>
         </div>

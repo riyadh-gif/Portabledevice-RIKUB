@@ -5,6 +5,7 @@ import { Maps } from './pages/Maps.jsx';
 import { Detection } from './pages/Detection.jsx';
 import { Chatbot } from './pages/Chatbot.jsx';
 import { DroneDashboard } from './pages/DroneDashboard.jsx';
+import { VirtualKeyboard } from './components/VirtualKeyboard.jsx';
 
 // Keyed wrapper: remount on path change replays the fade-up enter animation.
 function AnimatedRoutes() {
@@ -29,6 +30,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AnimatedRoutes />
+      <VirtualKeyboard />
     </BrowserRouter>
   );
 }

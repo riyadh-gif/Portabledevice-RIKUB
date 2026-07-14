@@ -342,6 +342,15 @@ export function Maps() {
     setSprayTargetFeatures(
       Array.isArray(featureCollection.features) ? featureCollection.features : [],
     );
+    // TEMP e2e test hook: open a spray-target popup by zone_code (avoids pixel-clicking).
+    if (typeof window !== "undefined") {
+      window.__openZone = (zc) => {
+        for (const lyr of Object.values(sprayTargetLayerIndex.current)) {
+          if (lyr?.feature?.properties?.zone_code === zc) { openSprayTargetPopup(lyr); return true; }
+        }
+        return false;
+      };
+    }
   }
 
   function addImageryOverlay(id, imagery, fit = false) {

@@ -10,3 +10,7 @@ matplotlib
 shapely
 pyproj
 grpcio
+httpx
+opencv-python-headless
+pyserial
+python-multipart

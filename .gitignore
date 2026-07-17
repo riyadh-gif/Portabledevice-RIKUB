@@ -27,3 +27,4 @@ datasets/
 ndvi/
 downloads/
 cv_model/*.pt
+.claude

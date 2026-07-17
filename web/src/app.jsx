@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-route
 import { Splash } from './pages/Splash.jsx';
 import { Menu } from './pages/Menu.jsx';
 import { Maps } from './pages/Maps.jsx';
+import { FlightPlan } from './pages/FlightPlan.jsx';
+import { Monitoring } from './pages/Monitoring.jsx';
 import { Detection } from './pages/Detection.jsx';
 import { Chatbot } from './pages/Chatbot.jsx';
 import { DroneDashboard } from './pages/DroneDashboard.jsx';
@@ -17,6 +19,8 @@ function AnimatedRoutes() {
         <Route path="/" element={<Splash />} />
         <Route path="/menu" element={<Menu />} />
         <Route path="/maps" element={<Maps />} />
+        <Route path="/flight-plan" element={<FlightPlan />} />
+        <Route path="/monitoring" element={<Monitoring />} />
         <Route path="/drone-dashboard/*" element={<DroneDashboard />} />
         <Route path="/detection" element={<Detection />} />
         <Route path="/chatbot" element={<Chatbot />} />

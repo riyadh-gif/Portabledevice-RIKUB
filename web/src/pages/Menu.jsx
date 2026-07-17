@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPinned, Bot, ScanSearch, ArrowRight, Layers, Image as ImageIcon, Cpu, LogOut, Wheat } from 'lucide-react';
+import { MapPinned, Bot, ScanSearch, ArrowRight, Layers, Image as ImageIcon, Cpu, LogOut, Wheat, Radar, Navigation } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,7 @@ const ACCENTS = {
   forest: { text: 'text-forest', chip: 'bg-forest/10 text-forest', top: 'border-t-forest' },
   leaf: { text: 'text-leaf', chip: 'bg-leaf/10 text-leaf', top: 'border-t-leaf' },
   harvest: { text: 'text-harvest', chip: 'bg-harvest/15 text-harvest', top: 'border-t-harvest' },
+  monitor: { text: 'text-indigo-600', chip: 'bg-indigo-500/10 text-indigo-600', top: 'border-t-indigo-500' },
 };
 
 const CARDS = [
@@ -52,6 +53,12 @@ const CARDS = [
     cover: '/data/cover/gis_new.png', objPos: '50% 42%', title: 'SmartGIS', subtitle: 'Peta Interaktif', online: true,
     desc: 'Pantau sawah dengan overlay GIS & citra real-time. Telusuri koordinat, layer lahan, dan titik foto lapangan.',
     stats: [{ Icon: Layers, label: '5 layer' }, { Icon: ImageIcon, label: '12 titik foto' }],
+  },
+  {
+    to: '/monitoring', accent: 'monitor', Icon: Radar, tag: 'Telemetry Live',
+    cover: '/data/cover/gis.jpg', objPos: '50% 55%', title: 'Monitoring Drone', subtitle: 'Pemantauan Misi', online: true,
+    desc: 'Pantau posisi drone, jalur misi & area penyemprotan secara real-time.',
+    stats: [{ Icon: Navigation, label: 'live tracking' }],
   },
   {
     to: '/chatbot', accent: 'leaf', Icon: Bot, tag: 'Asisten AI',
@@ -80,7 +87,7 @@ function FeatureCard({ card }) {
         tabIndex={0}
         onClick={() => navigate(card.to)}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate(card.to)}
-        className={`group relative flex cursor-pointer flex-col overflow-hidden border-t-[3px] ${a.top} p-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] row-span-2`}
+        className={`group relative flex cursor-pointer flex-col overflow-hidden border-t-[3px] ${a.top} p-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] md:row-span-3`}
       >
         <div className="relative min-h-0 w-full flex-1 overflow-hidden">
           <img src={card.cover} alt={card.title} loading="eager" decoding="async"
@@ -184,7 +191,7 @@ export function Menu() {
         <ExitKioskButton />
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[1.5fr_1fr] md:grid-rows-2">
+      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[1.5fr_1fr] md:grid-rows-3">
         {CARDS.map((c) => <FeatureCard key={c.to} card={c} />)}
       </main>
 

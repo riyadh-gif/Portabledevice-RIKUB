@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchDroneConfig } from "@/lib/gcs/api";
+import { fetchDroneConfig, setFlowConfig } from "@/lib/gcs/api";
 import { diagnosticsCoords, gpsFixLabel, isStale, useDiagnostics } from "@/lib/gcs/diagnostics";
 import {
   DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_PULSES_PER_LITER,
   MAX_POLL_INTERVAL_MS,
   MIN_POLL_INTERVAL_MS,
   normalizeBaseUrl,
@@ -11,6 +12,14 @@ import {
 
 const HOST_PORT_RE = /^[a-z0-9.-]+:\d{1,5}$/i;
 const POLL_PRESETS_S = [1, 2, 5];
+
+// Which flowmeter a calibration applies to. "all" recalibrates every line (and
+// updates the persisted local default); a numeric id targets one flowmeter.
+const FLOW_TARGETS = [
+  { id: "all", label: "Both lines" },
+  { id: 1, label: "Line 1 · D32" },
+  { id: 2, label: "Line 2 · D4" },
+];
 
 export function DroneSettings() {
   const [settings, setSettings] = useDroneSettings();
@@ -55,6 +64,54 @@ export function DroneSettings() {
   const applyPollSeconds = (seconds) => {
     if (!Number.isFinite(seconds)) return;
     setSettings({ pollIntervalMs: Math.round(seconds * 1000) });
+  };
+
+  // --- Flow-sensor calibration (pulses per litre — ZJ-S402B) ---
+  // Local draft applied on Save: persist to drone settings AND best-effort push
+  // to the backend (SetFlowConfig).
+  const [pplDraft, setPplDraft] = useState(String(settings.pulsesPerLiter));
+  const lastAppliedPpl = useRef(settings.pulsesPerLiter);
+  useEffect(() => {
+    if (settings.pulsesPerLiter !== lastAppliedPpl.current) {
+      lastAppliedPpl.current = settings.pulsesPerLiter;
+      setPplDraft(String(settings.pulsesPerLiter));
+    }
+  }, [settings.pulsesPerLiter]);
+
+  const pplParsed = Number(pplDraft);
+  const pplValid = Number.isFinite(pplParsed) && pplParsed > 0;
+  const pplDiffers = pplValid && pplParsed !== settings.pulsesPerLiter;
+
+  const [flowTarget, setFlowTarget] = useState("all");
+  const [flowSaving, setFlowSaving] = useState(false);
+  const [flowError, setFlowError] = useState(null);
+  const [flowSaved, setFlowSaved] = useState(false);
+
+  // Save is enabled for a single line whenever valid (it may already differ
+  // from the shared default); for "all", only when it differs from the default.
+  const flowCanSave = pplValid && !flowSaving && (flowTarget !== "all" || pplDiffers);
+
+  const applyPulsesPerLiter = async () => {
+    if (!flowCanSave) return;
+    const next = pplParsed;
+    setPplDraft(String(next));
+    // "Both lines" also updates the persisted local default; a single-line
+    // target only pushes to the backend — its live value returns via flow.sensors.
+    if (flowTarget === "all") {
+      lastAppliedPpl.current = next;
+      setSettings({ pulsesPerLiter: next });
+    }
+    setFlowSaving(true);
+    setFlowError(null);
+    setFlowSaved(false);
+    try {
+      await setFlowConfig(next, flowTarget === "all" ? undefined : flowTarget);
+      setFlowSaved(true);
+    } catch (e) {
+      setFlowError(e instanceof Error ? e.message : "failed to push calibration");
+    } finally {
+      setFlowSaving(false);
+    }
   };
 
   const [now, setNow] = useState(() => Date.now());
@@ -222,6 +279,99 @@ export function DroneSettings() {
             <p className="font-technical text-xs text-gcs-muted/80 mt-3">
               How often the global telemetry poller refreshes. Range {MIN_POLL_INTERVAL_MS / 1000}–
               {MAX_POLL_INTERVAL_MS / 1000} s · default {DEFAULT_POLL_INTERVAL_MS / 1000} s.
+            </p>
+          </Panel>
+
+          <Panel title="Flow Sensor" icon="water_drop">
+            <div className="flex flex-col gap-1.5 mb-4">
+              <span className="font-data text-sm text-gcs-muted uppercase tracking-wide">Apply to</span>
+              <div className="flex flex-wrap gap-2">
+                {FLOW_TARGETS.map((t) => {
+                  const activeSel = flowTarget === t.id;
+                  return (
+                    <button
+                      key={String(t.id)}
+                      type="button"
+                      onClick={() => setFlowTarget(t.id)}
+                      aria-pressed={activeSel}
+                      className={`px-4 py-2 rounded-xl font-data text-sm uppercase tracking-wide transition-colors ${
+                        activeSel
+                          ? "bg-gcs-primary text-white shadow"
+                          : "bg-white/60 text-gcs-muted hover:bg-white/80"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="font-data text-sm text-gcs-muted uppercase tracking-wide">
+                {flowTarget === "all"
+                  ? "Calibration — pulses per liter (both lines)"
+                  : `Calibration — ${FLOW_TARGETS.find((t) => t.id === flowTarget)?.label} pulses per liter`}
+              </span>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={pplDraft}
+                  min={1}
+                  step={1}
+                  onChange={(e) => setPplDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") applyPulsesPerLiter(); }}
+                  className="flex-1 px-4 py-3 rounded-xl bg-white/70 border border-gcs-outline/40 font-technical text-base text-gcs-on-surface focus:outline-none focus:border-gcs-primary transition-colors"
+                  aria-label="Flow sensor calibration — pulses per liter"
+                />
+                <button
+                  type="button"
+                  onClick={applyPulsesPerLiter}
+                  disabled={!flowCanSave}
+                  className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-headline text-base uppercase bg-gcs-primary text-white shadow-lg transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                >
+                  <span className={`material-symbols-outlined text-xl ${flowSaving ? "animate-spin" : ""}`}>
+                    {flowSaving ? "progress_activity" : "save"}
+                  </span>
+                  {flowSaving ? "Saving" : "Save"}
+                </button>
+              </div>
+            </label>
+
+            {!pplValid && (
+              <p className="flex items-center gap-1.5 font-technical text-xs text-gcs-error mt-3">
+                <span className="material-symbols-outlined text-base">warning</span>
+                Must be a positive number of pulses per liter.
+              </p>
+            )}
+            {flowError && (
+              <p className="flex items-center gap-1.5 font-technical text-xs text-gcs-error mt-3">
+                <span className="material-symbols-outlined text-base">cloud_off</span>
+                Saved locally, but backend push failed — {flowError}
+              </p>
+            )}
+            {flowSaved && !flowError && !flowSaving && (
+              <p className="flex items-center gap-1.5 font-technical text-xs text-gcs-primary mt-3">
+                <span className="material-symbols-outlined text-base">check_circle</span>
+                Calibration pushed to{" "}
+                {flowTarget === "all"
+                  ? "both flowmeters"
+                  : FLOW_TARGETS.find((t) => t.id === flowTarget)?.label}
+                .
+              </p>
+            )}
+
+            <p className="font-technical text-xs text-gcs-muted/80 mt-3 leading-relaxed">
+              Pulse count per dispensed liter for the <span className="font-bold">ZJ-S402B</span>{" "}
+              flowmeters (default {DEFAULT_PULSES_PER_LITER}). The sprayer has{" "}
+              <span className="font-bold">two</span> independent lines — pick a target above to
+              calibrate one, or <span className="font-bold">Both lines</span> together. Pushed to the
+              backend via{" "}
+              <code className="px-1 py-0.5 rounded bg-white/60 text-gcs-on-surface">SetFlowConfig</code>{" "}
+              (with{" "}
+              <code className="px-1 py-0.5 rounded bg-white/60 text-gcs-on-surface">sensor_id</code>{" "}
+              for a single line). Only the <span className="font-bold">Both lines</span> default is
+              saved on this tablet.
             </p>
           </Panel>
         </section>

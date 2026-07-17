@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Rocket,
 } from "lucide-react";
 import { DroneFloatingButton } from "@/components/maps/drone/DroneFloatingButton";
 import { DroneTelemetryBar } from "@/components/maps/drone/DroneTelemetryBar";
@@ -32,6 +33,7 @@ import { SprayTargetsPanel } from "@/components/maps/spray-targets/SprayTargetsP
 import { SprayingRoutePanel } from "@/components/maps/spraying-route/SprayingRoutePanel";
 import { FlightSettingsWidget } from "@/components/maps/spraying-route/FlightSettingsWidget";
 import { computeChamberGroups, defaultLaneSpacing } from "@/lib/gcs/chamber-groups";
+import { setFlightPlanInput } from "@/lib/gcs/flight-plan-input";
 import {
   BASE_BOUNDS,
   BASE_LAYERS,
@@ -1622,6 +1624,13 @@ export function Maps() {
     })
     .map((feature, index) => feature.properties?.zone_code ?? `Z${String(index + 1).padStart(2, "0")}`);
   const sprayReadyCount = sprayTargetFeatures.length - missingSprayTargetZones.length;
+  // Every spray-target polygon has at least one chamber (medicine) assigned,
+  // and the user is in the spray-targets workflow (layer on) — this is exactly
+  // when the "Start Planning Flight" call-to-action should surface.
+  const allChambersAssigned =
+    active.has("spray-targets") &&
+    sprayTargetFeatures.length > 0 &&
+    missingSprayTargetZones.length === 0;
   const routeWaypointCount = sprayTargetFeatures.length > 0 ? sprayTargetFeatures.length * 4 : 0;
   const chamberGroups = computeChamberGroups({
     features: sprayTargetFeatures,
@@ -1668,6 +1677,17 @@ export function Maps() {
   function handleRouteAltitudeChange(nextAltitude) {
     setRouteAltitude(nextAltitude);
     setRouteLaneSpacing(defaultLaneSpacing(nextAltitude));
+  }
+  function startFlightPlanning() {
+    setFlightPlanInput({
+      featureCollection: {
+        type: "FeatureCollection",
+        features: sprayTargetFeatures,
+      },
+      fieldName: selectedField?.name ?? null,
+      createdAt: new Date().toISOString(),
+    });
+    navigate("/flight-plan");
   }
   const shouldFillFieldPanel = ndviZoneFeatures.length > 0 || routeActive;
   const activeLayerPanels = [
@@ -2032,6 +2052,26 @@ export function Maps() {
           onToggleImagery={toggleImageryLayer}
           onToggleAnalysis={toggleAnalysisLayer}
         />
+
+        {allChambersAssigned && (
+          <div
+            className="absolute bottom-6 left-1/2 z-[1000] -translate-x-1/2"
+            style={{ animation: "fp-pop 360ms ease-out" }}
+          >
+            <button
+              type="button"
+              onClick={startFlightPlanning}
+              className="flex items-center gap-2.5 rounded-full bg-gradient-to-br from-leaf to-forest px-6 py-3.5 text-[15px] font-black text-white shadow-[0_16px_40px_rgba(0,98,65,0.4)] ring-4 ring-white/40 transition-transform hover:-translate-y-0.5 active:translate-y-0"
+              title="Rencanakan rute penerbangan drone"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-white/20">
+                <Rocket className="h-4 w-4" />
+              </span>
+              Start Planning Flight
+              <ChevronRight className="h-4 w-4 opacity-80" />
+            </button>
+          </div>
+        )}
 
         <DroneFloatingButton
           active={routeActive}

@@ -14,6 +14,9 @@ import { useDroneSettings } from "@/lib/gcs/drone-settings";
 import { useMissionPlan } from "@/lib/gcs/mission-plan";
 import { useActiveJob } from "@/lib/gcs/use-active-job";
 
+// Flowmeter id → the ESP pin it's wired to (for labelling the per-line stats).
+const FLOW_LINE_PIN = { 1: "D32", 2: "D4" };
+
 function num(value, digits = 2) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(digits) : "-";
@@ -42,6 +45,7 @@ export function Dashboard() {
   const gps = data?.gps_raw ?? null;
   const global = data?.global_position ?? null;
   const imu = data?.imu ?? null;
+  const flow = data?.flow ?? null;
   const coords = diagnosticsCoords(data);
   const mapCoords = coords ? { lat: coords.lat, lng: coords.lon } : null;
   const heading = headingDeg(data);
@@ -125,6 +129,21 @@ export function Dashboard() {
           <Stat label="Longitude" value={global ? `${num(global.longitude, 6)} deg` : "-"} tone="idle" icon="my_location" />
           <Stat label="Altitude" value={global ? `${num(global.altitude)} m` : "-"} tone="idle" icon="height" />
           <Stat label="Fix Source" value={coords ? (global ? "FUSED" : "RAW GPS") : "-"} tone="idle" icon="my_location" />
+        </Section>
+
+        <Section title="Flow" icon="water_drop" empty={!flow}>
+          <Stat label="Total Flow" value={flow ? `${num(flow.flow_rate_lpm, 1)} L/min` : "-"} tone="idle" icon="water_drop" />
+          <Stat label="Total Volume" value={flow ? `${num(flow.total_liters)} L` : "-"} tone="idle" icon="opacity" />
+          <Stat label="Link" value={flow ? (flow.connected ? "CONNECTED" : "NO LINK") : "-"} tone={flow ? (flow.connected ? "ok" : "error") : "idle"} icon={flow?.connected ? "link" : "link_off"} />
+          {(flow?.sensors ?? []).map((s) => (
+            <Stat
+              key={s.id}
+              label={`Line ${s.id}${FLOW_LINE_PIN[s.id] ? ` · ${FLOW_LINE_PIN[s.id]}` : ""}`}
+              value={`${num(s.flow_rate_lpm, 1)} L/min`}
+              icon={s.id >= 1 && s.id <= 9 ? `filter_${s.id}` : "water_drop"}
+              tone={s.connected ? "ok" : "error"}
+            />
+          ))}
         </Section>
 
         <Section title="IMU" icon="sensors" empty={!imu} className="md:col-span-2 lg:col-span-3">

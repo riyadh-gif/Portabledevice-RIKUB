@@ -7,10 +7,21 @@ export const DEFAULT_POLL_INTERVAL_MS = 3000;
 export const MIN_POLL_INTERVAL_MS = 500;
 export const MAX_POLL_INTERVAL_MS = 120000;
 
+/** ZJ-S402B flow sensor default calibration (pulses per litre). */
+export const DEFAULT_PULSES_PER_LITER = 4380;
+
 const DEFAULT = {
   baseUrl: "",
   pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+  pulsesPerLiter: DEFAULT_PULSES_PER_LITER,
 };
+
+/** A flow calibration must be a finite positive number; else the default. */
+function clampPulsesPerLiter(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_PULSES_PER_LITER;
+  return n;
+}
 
 export function normalizeBaseUrl(value = "") {
   return String(value)
@@ -33,6 +44,11 @@ function parse(raw) {
     return {
       baseUrl: normalizeBaseUrl(data.baseUrl),
       pollIntervalMs: clampInterval(data.pollIntervalMs),
+      // Back-compat: older persisted settings lack pulsesPerLiter → default.
+      pulsesPerLiter:
+        data.pulsesPerLiter === undefined
+          ? DEFAULT_PULSES_PER_LITER
+          : clampPulsesPerLiter(data.pulsesPerLiter),
     };
   } catch {
     return DEFAULT;
@@ -49,6 +65,7 @@ export function setDroneSettings(patch) {
   const next = {
     baseUrl: normalizeBaseUrl(patch.baseUrl ?? current.baseUrl),
     pollIntervalMs: clampInterval(patch.pollIntervalMs ?? current.pollIntervalMs),
+    pulsesPerLiter: clampPulsesPerLiter(patch.pulsesPerLiter ?? current.pulsesPerLiter),
   };
   window.localStorage.setItem(DRONE_SETTINGS_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(SETTINGS_EVENT));

@@ -30,13 +30,16 @@ export function calculateCoverageZone(objects) {
       } else if (obj.shape === "circle" && obj.radius) {
         const steps = 32;
         const coords = [];
-        for (let i = 0; i <= steps; i++) {
+        for (let i = 0; i < steps; i++) {
           const t = (i * 2 * Math.PI) / steps;
           coords.push([
             (obj.points[0].x + obj.radius * Math.cos(t)) * SCALE,
             (obj.points[0].y + obj.radius * Math.sin(t)) * SCALE,
           ]);
         }
+        // Close the ring explicitly: relying on cos(2π)/sin(2π) to match i=0
+        // leaves a ~1e-16 float gap and turf.polygon rejects the open ring.
+        coords.push(coords[0]);
         return turf.polygon([coords]);
       }
       return null;
@@ -50,8 +53,10 @@ export function calculateCoverageZone(objects) {
       const union = turf.union(turf.featureCollection([combinedObs, obstaclePolys[i]]));
       if (union) combinedObs = union;
     }
-    const diff = turf.difference(turf.featureCollection([coverageZone, combinedObs]));
-    if (diff) finalArea = diff;
+    // turf.difference returns null when the obstacles fully cover the area —
+    // that means nothing is sprayable, so the coverage becomes empty. Do NOT
+    // fall back to the un-subtracted zone (that would plan over the no-fly area).
+    finalArea = turf.difference(turf.featureCollection([coverageZone, combinedObs]));
   }
 
   return finalArea;
@@ -105,9 +110,15 @@ export function generateFlightPath(objects, config) {
 
     if (segments.length === 0) return [];
     const finalPath = [];
-    let currentPos = config.invert
-      ? segments[segments.length - 1][1]
-      : segments[0][0];
+    // config.startPoint ({x, y}) lets a caller seed the traversal from an
+    // arbitrary location (e.g. the nearest field point to the live drone GPS);
+    // the greedy walk below then begins at the lane end closest to it. When
+    // absent we fall back to the original two-ended invert behaviour.
+    let currentPos = config.startPoint
+      ? config.startPoint
+      : config.invert
+        ? segments[segments.length - 1][1]
+        : segments[0][0];
     const remaining = [...segments];
 
     while (remaining.length > 0) {

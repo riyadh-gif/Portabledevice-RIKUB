@@ -112,3 +112,60 @@ export async function executeMission(p = {}) {
     }),
   );
 }
+
+// --- Reactive spraying (see docs/drone_api.md → "Spraying pipeline") ---------
+
+// Poll the reactive spray session. Pass the previous response's `next_seq` back
+// as `sinceSeq` to fetch only the new sprayed samples for the realtime overlay.
+export async function fetchSprayStatus({ sinceSeq, maxSamples } = {}) {
+  const params = new URLSearchParams();
+  if (sinceSeq != null) params.set("since_seq", String(sinceSeq));
+  if (maxSamples != null) params.set("max_samples", String(maxSamples));
+  const query = params.toString();
+  return jsonOrThrow(
+    await fetch(`/api/drone/spray/status${query ? `?${query}` : ""}`, {
+      cache: "no-store",
+      headers: droneAddrHeaders(),
+    }),
+  );
+}
+
+// Upload a reactive spray mission (path + spray zones + per-liquid rates), then
+// call executeMission({ mode: "spraying", jobId }) to start actuating.
+export async function pushSprayMission(p) {
+  return jsonOrThrow(
+    await fetch("/api/drone/spray/mission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...droneAddrHeaders() },
+      body: JSON.stringify({
+        session_id: p.sessionId,
+        geo_waypoints: p.geoWaypoints,
+        zones: p.zones,
+        rates: p.rates,
+        swath_width_m: p.swathWidthM,
+        altitude: p.altitude,
+        speed: p.speed,
+      }),
+    }),
+  );
+}
+
+export const cancelSprayMission = () => postCommand("/api/drone/spray/cancel", {});
+export const setSprayConfig = (patch = {}) => postCommand("/api/drone/spray/config", patch);
+
+// Calibrate the sprayer flowmeters (SetFlowConfig). Pass sensorId (1 = D32,
+// 2 = D4) to recalibrate a single line; omit it to apply to every flowmeter.
+// Returns the flow snapshot (full when an ESP sensor is attached, else just
+// the echoed pulses_per_liter).
+export async function setFlowConfig(pulsesPerLiter, sensorId) {
+  return jsonOrThrow(
+    await fetch("/api/drone/flow-config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...droneAddrHeaders() },
+      body: JSON.stringify({
+        pulses_per_liter: pulsesPerLiter,
+        ...(sensorId !== undefined && { sensor_id: sensorId }),
+      }),
+    }),
+  );
+}

@@ -405,7 +405,7 @@ def iter_polygon_geometries(geom):
             yield from iter_polygon_geometries(part)
 
 
-def smooth_polygon_for_preview(polygon, tolerance_m: float = 0.15):
+def smooth_polygon_for_preview(polygon, tolerance_m: float = 1.0):
     if polygon.is_empty:
         return polygon
 
@@ -426,10 +426,13 @@ def generate_ndvi_zone_preview(
 
         import numpy as np
         import rasterio
+        from PIL import Image, ImageFilter
         from rasterio import features
-        from shapely.geometry import mapping, shape
+        from rasterio.enums import Resampling
+        from rasterio.windows import Window, from_bounds
+        from rasterio.windows import transform as window_transform
+        from shapely.geometry import Polygon, mapping, shape
         from shapely.ops import transform as shapely_transform
-        from shapely.ops import unary_union
         from pyproj import Transformer
     except ImportError as exc:
         raise HTTPException(
@@ -454,8 +457,29 @@ def generate_ndvi_zone_preview(
         )
 
     with rasterio.open(tif_path) as src:
-        ndvi = src.read(1)
-        valid_mask = (src.read_masks(1) > 0) & np.isfinite(ndvi)
+        # ponytail: cap zone-preview processing resolution; polygons are
+        # simplified to a 1m tolerance anyway (smooth_polygon_for_preview),
+        # so native sub-cm GSD buys nothing here. Raise MAX_DIM (or make it
+        # settings-driven) if a use case ever needs finer preview geometry.
+        MAX_DIM = 3000
+        scale = max(1, math.ceil(max(src.width, src.height) / MAX_DIM))
+        out_height = max(1, src.height // scale)
+        out_width = max(1, src.width // scale)
+
+        if scale > 1:
+            ndvi = src.read(1, out_shape=(out_height, out_width), resampling=Resampling.average)
+            mask_arr = src.read_masks(
+                1, out_shape=(out_height, out_width), resampling=Resampling.nearest
+            )
+            transform = src.transform * src.transform.scale(
+                src.width / out_width, src.height / out_height
+            )
+        else:
+            ndvi = src.read(1)
+            mask_arr = src.read_masks(1)
+            transform = src.transform
+
+        valid_mask = (mask_arr > 0) & np.isfinite(ndvi)
         if src.nodata is not None and not math.isnan(src.nodata):
             valid_mask &= ~np.isclose(ndvi, src.nodata)
 
@@ -487,18 +511,45 @@ def generate_ndvi_zone_preview(
                 detail="NDVI GeoTIFF does not have a CRS",
             )
 
-        transform = src.transform
-        polygons = [
+        # ponytail: merge nearby detections by closing the mask in raster
+        # space (Pillow Max/MinFilter = dilate/erode) instead of buffering
+        # and unary_union-ing thousands of raw per-pixel-blob polygons in
+        # shapely. Profiling showed that vector buffer+union was ~70% of
+        # total request time on a noisy threshold mask (22k+ raw blobs);
+        # closing the mask first collapses them before shapes() ever runs.
+        left, bottom, right, top = src.bounds
+        center_lng, center_lat = (left + right) / 2, (bottom + top) / 2
+
+        closing_mask = target_mask
+        if settings.merge_distance_m > 0:
+            buffer_distance_m = settings.merge_distance_m / 2
+            if crs.is_geographic:
+                px_size_m = (
+                    abs(transform.a) * 111320 * math.cos(math.radians(center_lat))
+                    + abs(transform.e) * 110540
+                ) / 2
+            else:
+                px_size_m = (abs(transform.a) + abs(transform.e)) / 2
+            radius_px = max(1, round(buffer_distance_m / max(px_size_m, 1e-9)))
+            kernel_size = 2 * radius_px + 1
+
+            mask_img = Image.fromarray((target_mask.astype(np.uint8) * 255), mode="L")
+            closed_img = mask_img.filter(ImageFilter.MaxFilter(kernel_size)).filter(
+                ImageFilter.MinFilter(kernel_size)
+            )
+            closing_mask = np.asarray(closed_img) > 0
+
+        raw_polygons = [
             shape(geom)
             for geom, value in features.shapes(
-                target_mask.astype(np.uint8),
-                mask=target_mask,
+                closing_mask.astype(np.uint8),
+                mask=closing_mask,
                 transform=transform,
             )
             if value == 1
         ]
 
-        if not polygons:
+        if not raw_polygons:
             return {
                 "imagery_id": str(imagery.id),
                 "settings": settings.model_dump(),
@@ -511,71 +562,82 @@ def generate_ndvi_zone_preview(
                 "geojson": {"type": "FeatureCollection", "features": []},
             }
 
-        unioned_wgs = unary_union(polygons)
-        centroid = unioned_wgs.centroid
-        projected_crs = f"EPSG:{auto_utm_epsg(centroid.x, centroid.y)}" if crs.is_geographic else crs
+        projected_crs = (
+            f"EPSG:{auto_utm_epsg(center_lng, center_lat)}" if crs.is_geographic else crs
+        )
         to_projected = Transformer.from_crs(crs, projected_crs, always_xy=True)
         to_original = Transformer.from_crs(projected_crs, crs, always_xy=True)
         to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
-        projected_polygons = [
-            shapely_transform(to_projected.transform, polygon)
-            for polygon in polygons
-            if not polygon.is_empty
-        ]
-
-        if settings.merge_distance_m > 0:
-            buffer_distance = settings.merge_distance_m / 2
-            merged = unary_union(
-                [polygon.buffer(buffer_distance) for polygon in projected_polygons]
-            ).buffer(-buffer_distance)
-        else:
-            merged = unary_union(projected_polygons)
-
         features_out = []
         summary_ndvi_values = []
 
-        for index, projected_polygon in enumerate(iter_polygon_geometries(merged), start=1):
-            if projected_polygon.is_empty or not projected_polygon.is_valid:
-                projected_polygon = projected_polygon.buffer(0)
-            if projected_polygon.is_empty:
+        for raw_polygon in raw_polygons:
+            if raw_polygon.is_empty or not raw_polygon.is_valid:
+                raw_polygon = raw_polygon.buffer(0)
+            if raw_polygon.is_empty:
                 continue
 
-            area_m2 = float(projected_polygon.area)
-            if area_m2 < settings.min_area_m2:
-                continue
+            for original_polygon in iter_polygon_geometries(raw_polygon):
+                projected_polygon = shapely_transform(to_projected.transform, original_polygon)
 
-            original_polygon = shapely_transform(to_original.transform, projected_polygon)
-            poly_mask = features.rasterize(
-                [(mapping(original_polygon), 1)],
-                out_shape=ndvi_clipped.shape,
-                transform=transform,
-                fill=0,
-                dtype=np.uint8,
-            )
-            ndvi_values = ndvi_clipped[(poly_mask == 1) & target_mask]
-            mean_ndvi = round(float(np.mean(ndvi_values)), 4) if ndvi_values.size else None
-            if ndvi_values.size:
-                summary_ndvi_values.append(ndvi_values)
+                # ponytail: drop interior holes smaller than min_area_m2 —
+                # same "too small to matter" threshold already used for
+                # standalone zones. Without this, isolated noise pixels
+                # inside a big zone show up as visible holes in the sprayed
+                # area instead of getting filtered out like everything else.
+                if projected_polygon.interiors:
+                    kept_interiors = [
+                        ring
+                        for ring in projected_polygon.interiors
+                        if Polygon(ring).area >= settings.min_area_m2
+                    ]
+                    if len(kept_interiors) != len(projected_polygon.interiors):
+                        projected_polygon = Polygon(projected_polygon.exterior, kept_interiors)
+                        original_polygon = shapely_transform(to_original.transform, projected_polygon)
 
-            preview_polygon = smooth_polygon_for_preview(projected_polygon)
-            preview_original_polygon = shapely_transform(to_original.transform, preview_polygon)
-            wgs84_polygon = shapely_transform(to_wgs84.transform, preview_original_polygon)
+                area_m2 = float(projected_polygon.area)
+                if area_m2 < settings.min_area_m2:
+                    continue
 
-            features_out.append(
-                {
-                    "type": "Feature",
-                    "geometry": mapping(wgs84_polygon),
-                    "properties": {
-                        "id": len(features_out) + 1,
-                        "area_m2": round(area_m2, 2),
-                        "area_ha": round(area_m2 / 10000, 4),
-                        "mean_ndvi": mean_ndvi,
-                        "ndvi_min": settings.ndvi_min,
-                        "ndvi_max": settings.ndvi_max,
-                    },
-                }
-            )
+                win = from_bounds(*original_polygon.bounds, transform=transform)
+                win = win.round_offsets().round_lengths()
+                win = win.intersection(Window(0, 0, ndvi_clipped.shape[1], ndvi_clipped.shape[0]))
+                row_sl, col_sl = win.toslices()
+                win_transform = window_transform(win, transform)
+
+                poly_mask = features.rasterize(
+                    [(mapping(original_polygon), 1)],
+                    out_shape=(int(win.height), int(win.width)),
+                    transform=win_transform,
+                    fill=0,
+                    dtype=np.uint8,
+                )
+                ndvi_values = ndvi_clipped[row_sl, col_sl][
+                    (poly_mask == 1) & target_mask[row_sl, col_sl]
+                ]
+                mean_ndvi = round(float(np.mean(ndvi_values)), 4) if ndvi_values.size else None
+                if ndvi_values.size:
+                    summary_ndvi_values.append(ndvi_values)
+
+                preview_polygon = smooth_polygon_for_preview(projected_polygon)
+                preview_original_polygon = shapely_transform(to_original.transform, preview_polygon)
+                wgs84_polygon = shapely_transform(to_wgs84.transform, preview_original_polygon)
+
+                features_out.append(
+                    {
+                        "type": "Feature",
+                        "geometry": mapping(wgs84_polygon),
+                        "properties": {
+                            "id": len(features_out) + 1,
+                            "area_m2": round(area_m2, 2),
+                            "area_ha": round(area_m2 / 10000, 4),
+                            "mean_ndvi": mean_ndvi,
+                            "ndvi_min": settings.ndvi_min,
+                            "ndvi_max": settings.ndvi_max,
+                        },
+                    }
+                )
 
         total_area_m2 = round(
             sum(feature["properties"]["area_m2"] for feature in features_out),

@@ -19,11 +19,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Rocket,
+  LocateFixed,
 } from "lucide-react";
 import { DroneFloatingButton } from "@/components/maps/drone/DroneFloatingButton";
 import { DroneTelemetryBar } from "@/components/maps/drone/DroneTelemetryBar";
 import { DroneTelemetryProvider } from "@/components/gcs/DroneTelemetryProvider";
 import { diagnosticsCoords, headingDeg, useDiagnostics } from "@/lib/gcs/diagnostics";
+import {
+  useDroneOffset,
+  applyOffsetToCoords,
+  applyOffsetToHeading,
+  hasOffset,
+  offsetMeters,
+} from "@/lib/gcs/drone-offset";
 import { LayerPanel } from "@/components/maps/layers/LayerPanel";
 import { MapFloatingControls } from "@/components/maps/MapFloatingControls";
 import { createLocationMarker } from "@/components/maps/locationPopup";
@@ -59,6 +67,7 @@ function droneMarkerIcon(rotationDeg) {
 export function Maps() {
   const navigate = useNavigate();
   const { data: diagnosticsData } = useDiagnostics();
+  const droneOffset = useDroneOffset(); // GPS-drift correction (see gps-offset.js)
   const mapDiv = useRef(null);
   const map = useRef(null);
   const baseLayers = useRef({});
@@ -1436,7 +1445,7 @@ export function Maps() {
   }
 
   function locateDrone() {
-    const coords = diagnosticsCoords(diagnosticsData);
+    const coords = applyOffsetToCoords(diagnosticsCoords(diagnosticsData), droneOffset);
     if (!map.current || !coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lon)) {
       alert("Lokasi drone belum tersedia dari telemetry.");
       return;
@@ -1544,10 +1553,12 @@ export function Maps() {
 
   useEffect(() => {
     if (!map.current) return;
-    const coords = diagnosticsCoords(diagnosticsData);
+    // Drift-correct the live marker so it lands where the drone truly is over
+    // the satellite imagery (display = reported + Δ). See lib/gcs/gps-offset.js.
+    const coords = applyOffsetToCoords(diagnosticsCoords(diagnosticsData), droneOffset);
     if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lon)) return;
 
-    const heading = headingDeg(diagnosticsData);
+    const heading = applyOffsetToHeading(headingDeg(diagnosticsData), droneOffset);
     // ponytail: lucide's Plane icon points ~45deg (northeast) at rest; this
     // offset aligns it to true heading. Tune visually if it looks off.
     const rotation = heading != null ? heading - 45 : 0;
@@ -1560,7 +1571,7 @@ export function Maps() {
     } else {
       droneLocationMarker.current = L.marker(latlng, { icon, interactive: false }).addTo(map.current);
     }
-  }, [diagnosticsData]);
+  }, [diagnosticsData, droneOffset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2039,6 +2050,13 @@ export function Maps() {
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
         />
+
+        {hasOffset(droneOffset) && (
+          <div className="pointer-events-none absolute right-4 top-4 z-[1000] flex items-center gap-1.5 rounded-full bg-sky-500/90 px-3 py-1.5 text-[11px] font-bold text-white shadow-[0_8px_20px_rgba(2,6,23,0.28)] backdrop-blur">
+            <LocateFixed className="h-3.5 w-3.5" />
+            Koreksi GPS {offsetMeters(droneOffset, droneCoords?.lat ?? 0).distance.toFixed(1)} m
+          </div>
+        )}
 
         <LayerPanel
           open={panelOpen}

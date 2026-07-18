@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { ArrowLeft, Radar } from "lucide-react";
+import { ArrowLeft, LocateFixed, Radar } from "lucide-react";
 import { BASE_LAYERS } from "@/components/maps/mapConfig";
 import { DroneTelemetryProvider } from "@/components/gcs/DroneTelemetryProvider";
 import { MonitoringPanel } from "@/components/maps/monitoring/MonitoringPanel";
@@ -11,6 +11,14 @@ import { useDroneSettings } from "@/lib/gcs/drone-settings";
 import { useMissionPlan } from "@/lib/gcs/mission-plan";
 import { useSprayStatus } from "@/lib/gcs/spray-status";
 import { cancelSprayMission } from "@/lib/gcs/api";
+import {
+  useDroneOffset,
+  applyOffsetToCoords,
+  applyOffsetToHeading,
+  hasOffset,
+  offsetMeters,
+  ZERO_OFFSET,
+} from "@/lib/gcs/drone-offset";
 import { haversineMeters } from "@/lib/gcs/flight-geo";
 import { DEFAULT_SWATH_M, classifySample, sampleLeafletStyle } from "@/lib/gcs/spray-overlay";
 
@@ -30,7 +38,9 @@ const TRAIL_STYLE = { color: "#34d399", weight: 3, opacity: 0.9, interactive: fa
 const ZONE_STYLE = { color: "rgba(255,255,255,0.72)", weight: 1.5, fillColor: "#ffffff", fillOpacity: 0.06, interactive: false };
 
 function droneIcon(rotationDeg) {
-  const deg = Number.isFinite(rotationDeg) ? rotationDeg : 0;
+  // The lucide "Plane" glyph points ~45° NE at rest, so subtract 45 to align the
+  // nose with the true compass heading (matches Maps.jsx droneMarkerIcon).
+  const deg = Number.isFinite(rotationDeg) ? rotationDeg - 45 : 0;
   return L.divIcon({
     className: "",
     iconSize: [40, 40],
@@ -57,10 +67,19 @@ export function Monitoring() {
   const plan = useMissionPlan();
   const { status: sprayStatus, samples: spraySamples } = useSprayStatus();
 
-  const drone = diagnosticsCoords(diagnosticsData);
-  const droneLat = drone?.lat ?? null;
-  const droneLon = drone?.lng ?? drone?.lon ?? null;
-  const heading = headingDeg(diagnosticsData);
+  // The live marker/trail are shifted by the GPS drift so they sit where the
+  // drone truly is over the field (display = reported + Δ); the planned path/zones
+  // stay in the map frame. Crucially we use the offset the mission was COMMANDED
+  // with (frozen into the plan at launch) — not the live calibration — so the
+  // display stays registered with the ground track the drone is actually flying
+  // even if the operator recalibrates/resets afterwards. Only when no mission is
+  // loaded (just watching telemetry) do we fall back to the live calibration.
+  const liveOffset = useDroneOffset();
+  const offset = plan ? plan.gpsOffset ?? ZERO_OFFSET : liveOffset;
+  const displayDrone = applyOffsetToCoords(diagnosticsCoords(diagnosticsData), offset);
+  const droneLat = displayDrone?.lat ?? null;
+  const droneLon = displayDrone?.lng ?? null;
+  const heading = applyOffsetToHeading(headingDeg(diagnosticsData), offset);
 
   const staleThreshold = Math.max(10000, pollIntervalMs * 3);
   const stale = !diagError && isStale(updatedAt, staleThreshold);
@@ -205,7 +224,11 @@ export function Monitoring() {
       if (!Number.isFinite(sample.lat) || !Number.isFinite(sample.lng)) continue;
       const cls = classifySample(sample);
       if (!cls.paint) continue;
-      const circle = L.circle([sample.lat, sample.lng], { radius, ...sampleLeafletStyle(cls.color) }).addTo(group);
+      // Samples are the drone's own (drifted) GPS fixes, so drift-correct them
+      // too — otherwise the painted coverage sits shifted from the corrected
+      // drone marker and the map-frame zones.
+      const p = applyOffsetToCoords({ lat: sample.lat, lng: sample.lng }, offset);
+      const circle = L.circle([p.lat, p.lng], { radius, ...sampleLeafletStyle(cls.color) }).addTo(group);
       sprayLayers.current.push(circle);
     }
     lastDrawnSeq.current = maxSeq;
@@ -215,7 +238,7 @@ export function Monitoring() {
     if (overflow > 0) {
       for (const old of sprayLayers.current.splice(0, overflow)) group.removeLayer(old);
     }
-  }, [spraySamples, sprayStatus, plan]);
+  }, [spraySamples, sprayStatus, plan, offset]);
 
   async function handleCancel() {
     setCancelling(true);
@@ -270,6 +293,13 @@ export function Monitoring() {
         {!hasMission && (
           <div className="pointer-events-none absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-full bg-house/90 px-4 py-1.5 text-[11px] font-bold text-slate-100 shadow-[0_10px_24px_rgba(2,6,23,0.35)] backdrop-blur">
             Belum ada misi penyemprotan aktif
+          </div>
+        )}
+
+        {hasOffset(offset) && (
+          <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex items-center gap-1.5 rounded-full bg-sky-500/90 px-3 py-1.5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(2,6,23,0.35)] backdrop-blur">
+            <LocateFixed className="h-3.5 w-3.5" />
+            Koreksi GPS {offsetMeters(offset, droneLat ?? DEFAULT_CENTER[0]).distance.toFixed(1)} m
           </div>
         )}
 

@@ -6,6 +6,7 @@ import { parseKml, projectMaps } from "@/lib/gcs/kml";
 import { fitZoom, projector, unprojector } from "@/lib/gcs/mercator";
 import { fetchJob, fetchJobs, executeMission, pushMission } from "@/lib/gcs/api";
 import { setMissionPlan } from "@/lib/gcs/mission-plan";
+import { useDroneOffset, correctPolygonForCommand } from "@/lib/gcs/drone-offset";
 import { ConfirmationModal } from "@/components/gcs/ConfirmationModal";
 import { PreFlightAuditModal } from "@/components/gcs/PreFlightAuditModal";
 
@@ -36,6 +37,7 @@ function sessionMercatorView(polygons) {
 
 export function Spraying() {
   const navigate = useNavigate();
+  const droneOffset = useDroneOffset(); // GPS-drift correction (see gps-offset.js)
   const fileRef = useRef(null);
 
   const [phase, setPhase] = useState(0);
@@ -156,11 +158,16 @@ export function Spraying() {
     try {
       const geoWp = toGeoWaypoints();
       const wp = flightPath.map((p, i) => [i, p.x, p.y, settings.altitude]);
+      // Shift the map-frame path into the drone's GPS frame before sending, so a
+      // calibrated drift flies the same intended ground track from this page as
+      // from the flight-planner: command = planned − Δ. See lib/gcs/gps-offset.js.
+      const geoWpCmd = correctPolygonForCommand(geoWp, droneOffset);
 
       setMissionPlan({
         jobId: selectedJobId,
         waypoints: wp,
         geoWaypoints: geoWp,
+        gpsOffset: droneOffset,
         doses,
         settings,
         createdAt: new Date().toISOString(),
@@ -168,7 +175,7 @@ export function Spraying() {
 
       await pushMission({
         waypoints: wp,
-        geoWaypoints: geoWp,
+        geoWaypoints: geoWpCmd,
         altitude: settings.altitude,
         speed: settings.speed,
         holdTime: settings.holdTime,

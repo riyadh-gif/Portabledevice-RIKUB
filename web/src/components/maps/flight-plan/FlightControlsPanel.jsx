@@ -7,8 +7,10 @@ import {
   Crosshair,
   Hexagon,
   Loader2,
+  LocateFixed,
   Route,
   Rocket,
+  RotateCcw,
   RotateCw,
   Ruler,
   Trash2,
@@ -16,6 +18,151 @@ import {
   X,
 } from "lucide-react";
 import { NumberInput } from "@/components/maps/spraying-route/SprayingRoutePanel";
+
+// Friendly "Dikalibrasi N mnt lalu" age label for the active drift correction.
+function formatAge(ts) {
+  if (!Number.isFinite(ts)) return "Baru dikalibrasi";
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return "Dikalibrasi <1 mnt lalu";
+  const m = Math.round(s / 60);
+  if (m < 60) return `Dikalibrasi ${m} mnt lalu`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `Dikalibrasi ${h} jam lalu`;
+  return `Dikalibrasi ${Math.round(h / 24)} hari lalu`;
+}
+
+// GPS-drift ("pose") calibration: the user tells the map where the drone truly
+// is and which way it faces, RViz-style. See lib/gcs/gps-offset.js for the model.
+function PoseCalibrationSection({
+  offsetInfo,
+  droneAvailable,
+  poseMode,
+  poseHasAnchor,
+  onStartPose,
+  onSavePositionOnly,
+  onCancelPose,
+  onResetOffset,
+}) {
+  return (
+    <div className="mt-2.5 rounded-xl border border-sky-400/20 bg-sky-400/5 p-2">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          <LocateFixed className="h-3 w-3" /> Kalibrasi Pose Drone
+        </span>
+        {offsetInfo && !poseMode && (
+          <span className="text-[9px] font-black uppercase tracking-[0.08em] text-emerald-300">
+            Aktif
+          </span>
+        )}
+      </div>
+
+      {!poseMode && (
+        <>
+          {offsetInfo ? (
+            <div className="mt-1.5 rounded-lg bg-emerald-400/10 px-2 py-1.5 ring-1 ring-emerald-400/20">
+              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-100">
+                <span className="flex items-center gap-1">
+                  <Crosshair className="h-3 w-3" /> Drift GPS
+                </span>
+                <span className="tabular-nums">
+                  {offsetInfo.meters.toFixed(1)} m
+                  {offsetInfo.bearing != null && ` · ${Math.round(offsetInfo.bearing)}°`}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center justify-between text-[10px] font-bold text-emerald-100">
+                <span className="flex items-center gap-1">
+                  <Compass className="h-3 w-3" /> Koreksi arah
+                </span>
+                <span className="tabular-nums">
+                  {offsetInfo.headingDelta >= 0 ? "+" : ""}
+                  {Math.round(offsetInfo.headingDelta)}°
+                </span>
+              </div>
+              <div className="mt-0.5 text-[8px] font-semibold text-emerald-200/70">
+                {formatAge(offsetInfo.calibratedAt)}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[10px] font-medium leading-snug text-slate-300">
+              Beri tahu posisi &amp; arah drone yang sebenarnya di peta untuk mengoreksi drift GPS.
+            </p>
+          )}
+
+          {offsetInfo ? (
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={onStartPose}
+                disabled={!droneAvailable}
+                className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[10px] font-black transition-colors ${
+                  droneAvailable
+                    ? "bg-sky-400/90 text-house hover:bg-sky-300"
+                    : "cursor-not-allowed bg-white/5 text-slate-500"
+                }`}
+                title={droneAvailable ? "Kalibrasi ulang" : "GPS drone belum tersedia"}
+              >
+                <LocateFixed className="h-3 w-3" /> Ulangi
+              </button>
+              <button
+                type="button"
+                onClick={onResetOffset}
+                className="flex h-7 items-center justify-center gap-1 rounded-lg bg-white/5 text-[10px] font-black text-slate-200 transition-colors hover:bg-rose-500/20 hover:text-rose-200"
+              >
+                <RotateCcw className="h-3 w-3" /> Reset
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onStartPose}
+              disabled={!droneAvailable}
+              className={`mt-1.5 flex h-7 w-full items-center justify-center gap-1 rounded-lg text-[10px] font-black transition-colors ${
+                droneAvailable
+                  ? "bg-sky-400/90 text-house hover:bg-sky-300"
+                  : "cursor-not-allowed bg-white/5 text-slate-500"
+              }`}
+              title={droneAvailable ? "Mulai kalibrasi" : "GPS drone belum tersedia"}
+            >
+              <LocateFixed className="h-3 w-3" />
+              {droneAvailable ? "Kalibrasi posisi drone" : "GPS drone belum ada"}
+            </button>
+          )}
+        </>
+      )}
+
+      {poseMode && (
+        <div className="mt-1.5">
+          <p className="text-[10px] font-medium leading-snug text-sky-200">
+            {poseHasAnchor
+              ? "Ketuk arah hadap drone — atau simpan posisi saja."
+              : "Ketuk peta tepat di posisi drone yang sebenarnya."}
+          </p>
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={onSavePositionOnly}
+              disabled={!poseHasAnchor}
+              className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[10px] font-black transition-colors ${
+                poseHasAnchor
+                  ? "bg-emerald-400/90 text-house hover:bg-emerald-300"
+                  : "cursor-not-allowed bg-white/5 text-slate-500"
+              }`}
+            >
+              <Check className="h-3 w-3" /> Posisi saja
+            </button>
+            <button
+              type="button"
+              onClick={onCancelPose}
+              className="flex h-7 items-center justify-center gap-1 rounded-lg bg-white/5 text-[10px] font-black text-slate-200 transition-colors hover:bg-rose-500/20 hover:text-rose-200"
+            >
+              <X className="h-3 w-3" /> Batal
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ObstacleSection({
   obstacles,
@@ -181,6 +328,13 @@ export function FlightControlsPanel({
   onAngleAuto,
   droneAvailable,
   onResetStartToDrone,
+  offsetInfo,
+  poseMode,
+  poseHasAnchor,
+  onStartPose,
+  onSavePositionOnly,
+  onCancelPose,
+  onResetOffset,
   waypointCount,
   distanceMeters,
   areaHa,
@@ -296,6 +450,17 @@ export function FlightControlsPanel({
               className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-emerald-400"
             />
           </div>
+
+          <PoseCalibrationSection
+            offsetInfo={offsetInfo}
+            droneAvailable={droneAvailable}
+            poseMode={poseMode}
+            poseHasAnchor={poseHasAnchor}
+            onStartPose={onStartPose}
+            onSavePositionOnly={onSavePositionOnly}
+            onCancelPose={onCancelPose}
+            onResetOffset={onResetOffset}
+          />
 
           <div className="mt-2.5 rounded-xl border border-white/10 bg-white/5 p-2">
             <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">

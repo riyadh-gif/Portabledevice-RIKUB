@@ -13,6 +13,20 @@ import { pushSprayMission, executeMission, cancelSprayMission } from "@/lib/gcs/
 import { ratesFromChambers } from "@/lib/gcs/spray-overlay";
 import { readFlightPlanInput } from "@/lib/gcs/flight-plan-input";
 import {
+  useDroneOffset,
+  setDroneOffset,
+  clearDroneOffset,
+  computeDroneOffset,
+  applyOffsetToCoords,
+  applyOffsetToHeading,
+  correctGeoWaypointsForCommand,
+  correctPolygonForCommand,
+  bearingDeg,
+  hasOffset,
+  offsetMeters,
+  offsetBearingDeg,
+} from "@/lib/gcs/drone-offset";
+import {
   featuresToTargets,
   defaultAngleDeg,
   planFlightPath,
@@ -73,7 +87,9 @@ function flagIcon(kind) {
 }
 
 function droneIcon(rotationDeg) {
-  const deg = Number.isFinite(rotationDeg) ? rotationDeg : 0;
+  // The lucide "Plane" glyph points ~45° NE at rest, so subtract 45 to make the
+  // nose sit at the true compass heading (matches Maps.jsx droneMarkerIcon).
+  const deg = Number.isFinite(rotationDeg) ? rotationDeg - 45 : 0;
   return L.divIcon({
     className: "",
     iconSize: [40, 40],
@@ -85,13 +101,36 @@ function droneIcon(rotationDeg) {
   });
 }
 
+// Faded "where the GPS thinks the drone is" reference, shown during pose
+// calibration so the user can see the raw fix they are correcting away from.
+function poseGhostIcon(rotationDeg) {
+  // Same ~45° NE rest orientation as droneIcon — align the nose to true heading.
+  const deg = Number.isFinite(rotationDeg) ? rotationDeg - 45 : 0;
+  return L.divIcon({
+    className: "",
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
+    html: `<div style="position:relative;width:46px;height:46px;opacity:0.55">
+      <svg width="20" height="20" viewBox="0 0 24 24" style="position:absolute;left:50%;top:50%;margin-left:-10px;margin-top:-10px;transform:rotate(${deg}deg)"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="#64748b" stroke="white" stroke-width="1"/></svg>
+      <span style="position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);font:700 8px sans-serif;color:#fff;background:#64748b;border-radius:4px;padding:0 3px;white-space:nowrap">GPS</span>
+    </div>`,
+  });
+}
+
 export function FlightPlan() {
   const navigate = useNavigate();
   const { data: diagnosticsData } = useDiagnostics();
-  const drone = diagnosticsCoords(diagnosticsData);
-  const droneLat = drone?.lat ?? null;
-  const droneLon = drone?.lon ?? null;
-  const heading = headingDeg(diagnosticsData);
+  const offset = useDroneOffset();
+  const drone = diagnosticsCoords(diagnosticsData); // RAW reported {lat, lon}
+  const rawHeading = headingDeg(diagnosticsData); // RAW reported heading (deg)
+  const droneAvailable =
+    drone != null && Number.isFinite(drone.lat) && Number.isFinite(drone.lon);
+  // Everything the user SEES is shifted by the calibrated GPS drift, so the
+  // marker sits where the drone truly is over the field (display = reported + Δ).
+  const displayDrone = applyOffsetToCoords(drone, offset);
+  const displayLat = displayDrone?.lat ?? null;
+  const displayLon = displayDrone?.lng ?? null;
+  const displayHeading = applyOffsetToHeading(rawHeading, offset);
 
   const [input] = useState(() => readFlightPlanInput());
   const targets = useMemo(
@@ -111,6 +150,8 @@ export function FlightPlan() {
   const [drawMode, setDrawMode] = useState("none"); // "none" | "polygon" | "circle"
   const [draftPointCount, setDraftPointCount] = useState(0);
   const [draftHasCenter, setDraftHasCenter] = useState(false);
+  const [poseMode, setPoseMode] = useState(false); // drone-pose calibration active
+  const [poseHasAnchor, setPoseHasAnchor] = useState(false); // 1st tap placed
 
   const mapDiv = useRef(null);
   const map = useRef(null);
@@ -119,12 +160,17 @@ export function FlightPlan() {
   const endMarker = useRef(null);
   const droneMarker = useRef(null);
   const startSeeded = useRef(false);
+  const startFromDrone = useRef(true); // start still anchored to the drone (auto)?
+  const seededOffsetRef = useRef(null); // offset the start was last seeded with
   const draftLayer = useRef(null);
   const obstacleLayer = useRef(null);
   const draftPts = useRef([]);
   const draftCenter = useRef(null);
   const obstacleId = useRef(0);
   const onMapClick = useRef(null);
+  const onMapMove = useRef(null);
+  const poseLayer = useRef(null);
+  const poseAnchor = useRef(null); // committed 1st-tap "true" position
 
   const hasTargets = targets.length > 0;
 
@@ -139,6 +185,17 @@ export function FlightPlan() {
     for (const target of targets) for (const c of target.chambers) set.add(c);
     return [...set];
   }, [targets]);
+
+  // Human-readable summary of the active GPS drift for the calibration panel.
+  const offsetAtLat = displayLat ?? targetsBounds(targets)?.cLat ?? 0;
+  const offsetInfo = hasOffset(offset)
+    ? {
+        meters: offsetMeters(offset, offsetAtLat).distance,
+        bearing: offsetBearingDeg(offset, offsetAtLat),
+        headingDelta: offset.dHeading,
+        calibratedAt: offset.calibratedAt,
+      }
+    : null;
 
   // Create the interactive map once, draw the target polygons, fit the view.
   useEffect(() => {
@@ -166,13 +223,16 @@ export function FlightPlan() {
       },
     }).addTo(m);
 
-    // Obstacles below, active draft above (both above tiles, below path/markers).
+    // Obstacles below, active draft above, pose-calibration overlay on top
+    // (all above tiles, below path/markers).
     obstacleLayer.current = L.layerGroup().addTo(m);
     draftLayer.current = L.layerGroup().addTo(m);
+    poseLayer.current = L.layerGroup().addTo(m);
 
-    // Attach the click listener here (in lock-step with the map's lifecycle) and
-    // delegate to the latest handler ref so it always sees current drawMode/draft.
+    // Attach the listeners here (in lock-step with the map's lifecycle) and
+    // delegate to the latest handler refs so they always see current state.
     m.on("click", (event) => onMapClick.current?.(event));
+    m.on("mousemove", (event) => onMapMove.current?.(event));
 
     const bounds = targetsBounds(targets);
     if (bounds) {
@@ -194,19 +254,24 @@ export function FlightPlan() {
       droneMarker.current = null;
       draftLayer.current = null;
       obstacleLayer.current = null;
+      poseLayer.current = null;
     };
   }, [hasTargets, targets, input]);
 
-  // Seed the start point from the live drone GPS ONCE, the first time it is
-  // available. We deliberately do not re-seed on later ticks: GPS jitter would
-  // otherwise reshuffle the whole coverage path on every poll. After this, the
-  // start only moves when the user drags the flag or taps "Mulai dari drone".
+  // Seed the start point from the drone's (drift-corrected) position. We do NOT
+  // re-seed on ordinary GPS jitter — that would reshuffle the coverage path every
+  // poll — but we DO re-seed when the calibration (offset identity) changes, so a
+  // fresh calibration re-anchors the start to where the drone truly is instead of
+  // stranding the flag at the pre-calibration spot. Once the user drags the flag
+  // (startFromDrone=false) neither jitter nor calibration moves it.
   useEffect(() => {
-    if (startSeeded.current) return;
-    if (droneLat == null || droneLon == null) return;
-    setStartLngLat({ lat: droneLat, lng: droneLon });
+    if (displayLat == null || displayLon == null) return;
+    if (!startFromDrone.current) return;
+    if (startSeeded.current && seededOffsetRef.current === offset) return;
+    setStartLngLat({ lat: displayLat, lng: displayLon });
     startSeeded.current = true;
-  }, [droneLat, droneLon]);
+    seededOffsetRef.current = offset;
+  }, [displayLat, displayLon, offset]);
 
   // Re-plan whenever inputs (including obstacles) change.
   useEffect(() => {
@@ -270,6 +335,7 @@ export function FlightPlan() {
       startMarker.current.on("dragend", (event) => {
         const ll = event.target.getLatLng();
         startSeeded.current = true;
+        startFromDrone.current = false; // user took manual control of the start
         setStartLngLat({ lat: ll.lat, lng: ll.lng });
       });
     }
@@ -283,34 +349,39 @@ export function FlightPlan() {
       }).addTo(m);
   }, [plan, pathReady, geoPath]);
 
-  // Live drone marker.
+  // Live drone marker — drift-corrected for display, and hidden during pose
+  // calibration (the ghost/placement markers take over then).
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    if (droneLat == null || droneLon == null) {
+    if (poseMode || displayLat == null || displayLon == null) {
       if (droneMarker.current) {
         m.removeLayer(droneMarker.current);
         droneMarker.current = null;
       }
       return;
     }
-    const pos = [droneLat, droneLon];
+    const pos = [displayLat, displayLon];
     if (droneMarker.current) {
       droneMarker.current.setLatLng(pos);
-      droneMarker.current.setIcon(droneIcon(heading));
+      droneMarker.current.setIcon(droneIcon(displayHeading));
     } else {
       droneMarker.current = L.marker(pos, {
-        icon: droneIcon(heading),
+        icon: droneIcon(displayHeading),
         zIndexOffset: 1200,
         interactive: false,
       }).addTo(m);
     }
-  }, [droneLat, droneLon, heading]);
+  }, [poseMode, displayLat, displayLon, displayHeading]);
 
   // Keep the latest map-click handler in a ref so a single stable listener can
   // delegate to it while always seeing current drawMode / draft state.
   useEffect(() => {
     onMapClick.current = (event) => {
+      if (poseMode) {
+        handlePoseClick(event);
+        return;
+      }
       if (drawMode === "none") return;
       const { lat, lng } = event.latlng;
       if (drawMode === "polygon") {
@@ -335,6 +406,16 @@ export function FlightPlan() {
       setDraftHasCenter(false);
       setDrawMode("none");
       drawDraft(map.current, draftLayer, [], null);
+    };
+  });
+
+  // Live rubber-band arrow that tracks the cursor between the two calibration
+  // taps (mouse only — a touch tap has no hover, so the preview just updates on
+  // the next tap). Kept in a ref so the stable map listener sees current state.
+  useEffect(() => {
+    onMapMove.current = (event) => {
+      if (!poseMode || !poseAnchor.current) return;
+      drawPosePreview(poseAnchor.current, { lat: event.latlng.lat, lng: event.latlng.lng });
     };
   });
 
@@ -370,6 +451,112 @@ export function FlightPlan() {
     setObstacles((prev) => prev.filter((o) => o.id !== id));
   }
 
+  // --- Drone pose calibration ("tell me where the drone really is", RViz-style) ---
+  // Renders the faded RAW-GPS reference plus the placed "true" pose and its
+  // heading arrow. `cursor` (live mouse hover) makes the arrow track before the
+  // 2nd tap; on touch it simply reflects the two committed taps.
+  function drawPosePreview(anchor, cursor) {
+    const group = poseLayer.current;
+    if (!group) return;
+    group.clearLayers();
+    if (drone && Number.isFinite(drone.lat)) {
+      L.marker([drone.lat, drone.lon], {
+        icon: poseGhostIcon(rawHeading),
+        interactive: false,
+        zIndexOffset: 1100,
+      }).addTo(group);
+    }
+    if (!anchor) return;
+    const bearing = cursor ? bearingDeg(anchor, cursor) : null;
+    if (cursor) {
+      L.polyline(
+        [
+          [anchor.lat, anchor.lng],
+          [cursor.lat, cursor.lng],
+        ],
+        { color: "#2563eb", weight: 2.5, dashArray: "6 5", interactive: false },
+      ).addTo(group);
+    }
+    L.marker([anchor.lat, anchor.lng], {
+      icon: droneIcon(bearing ?? displayHeading ?? 0),
+      interactive: false,
+      zIndexOffset: 1300,
+    }).addTo(group);
+  }
+
+  function enterPoseMode() {
+    if (!droneAvailable) {
+      setError("GPS drone belum tersedia — tidak dapat mengkalibrasi drift.");
+      return;
+    }
+    setError(null);
+    if (drawMode !== "none") cancelDraw();
+    poseAnchor.current = null;
+    setPoseHasAnchor(false);
+    setPoseMode(true);
+    drawPosePreview(null, null); // show the raw-GPS ghost reference
+  }
+
+  function exitPoseMode() {
+    poseAnchor.current = null;
+    setPoseHasAnchor(false);
+    setPoseMode(false);
+    poseLayer.current?.clearLayers();
+  }
+
+  // Commit: Δ = true_pose − reported_pose, using the RAW fix at THIS instant as
+  // the baseline (never the already-corrected display value). trueBearing null
+  // = "position only" — keeps the previous heading correction.
+  function commitPose(anchor, trueBearing) {
+    const reported = diagnosticsCoords(diagnosticsData);
+    const reportedHeading = headingDeg(diagnosticsData);
+    const delta = computeDroneOffset({
+      reported,
+      reportedHeading,
+      truePos: anchor,
+      trueBearing,
+      previous: offset,
+    });
+    if (!delta) {
+      setError("GPS drone belum lengkap — tidak dapat mengkalibrasi drift.");
+      exitPoseMode();
+      return;
+    }
+    setDroneOffset(delta);
+    // The heading half needs a reported-heading baseline to form a delta. If the
+    // user pointed a direction but telemetry has no heading yet, the position was
+    // still saved — say so rather than silently dropping the facing tap.
+    if (Number.isFinite(trueBearing) && !Number.isFinite(reportedHeading)) {
+      setError("Posisi disimpan. Arah belum bisa dikalibrasi — drone belum melaporkan heading.");
+    } else {
+      setError(null);
+    }
+    exitPoseMode();
+  }
+
+  function handlePoseClick(event) {
+    const latlng = { lat: event.latlng.lat, lng: event.latlng.lng };
+    if (!poseAnchor.current) {
+      // First tap: where the drone actually is.
+      poseAnchor.current = latlng;
+      setPoseHasAnchor(true);
+      drawPosePreview(latlng, null);
+      return;
+    }
+    // Second tap: the direction it faces → commit the full pose.
+    commitPose(poseAnchor.current, bearingDeg(poseAnchor.current, latlng));
+  }
+
+  function savePositionOnly() {
+    if (!poseAnchor.current) return;
+    commitPose(poseAnchor.current, null);
+  }
+
+  function resetOffset() {
+    clearDroneOffset();
+    setError(null);
+  }
+
   async function handleStartFlying() {
     if (!pathReady) return;
     setSubmitting(true);
@@ -386,6 +573,16 @@ export function FlightPlan() {
         rates: ratesFromChambers(target.chambers),
       }));
       const sessionId = `spray-${Date.now().toString(36)}`;
+      // The path/zones above are in the MAP frame (satellite imagery) — stored
+      // as-is so the monitoring overlay lines up with what the user drew. Before
+      // sending to the drone we shift them into its (drifted) GPS frame so it
+      // physically flies the intended ground track: command = planned − Δ.
+      const commandWaypoints = correctGeoWaypointsForCommand(geoWaypoints, offset);
+      const commandZones = zones.map((zone) => ({
+        id: zone.id,
+        polygon: correctPolygonForCommand(zone.polygon, offset),
+        rates: zone.rates,
+      }));
       setMissionPlan({
         source: "flight-plan",
         mode: "spraying",
@@ -398,6 +595,7 @@ export function FlightPlan() {
         altitude,
         laneSpacing,
         angleDeg,
+        gpsOffset: offset,
         createdAt: new Date().toISOString(),
       });
       // Release any previously-armed spray session so a re-plan isn't refused
@@ -405,8 +603,8 @@ export function FlightPlan() {
       await cancelSprayMission().catch(() => {});
       await pushSprayMission({
         sessionId,
-        geoWaypoints,
-        zones: zones.map((zone) => ({ id: zone.id, polygon: zone.polygon, rates: zone.rates })),
+        geoWaypoints: commandWaypoints,
+        zones: commandZones,
         swathWidthM: laneSpacing,
         altitude,
         speed: DEFAULT_SPEED,
@@ -494,12 +692,21 @@ export function FlightPlan() {
             onAltitudeChange={setAltitude}
             onAngleChange={setAngleDeg}
             onAngleAuto={() => setAngleDeg(defaultAngleDeg(targets))}
-            droneAvailable={droneLat != null && droneLon != null}
+            droneAvailable={droneAvailable}
             onResetStartToDrone={() => {
-              if (droneLat == null || droneLon == null) return;
+              if (displayLat == null || displayLon == null) return;
               startSeeded.current = true;
-              setStartLngLat({ lat: droneLat, lng: droneLon });
+              startFromDrone.current = true; // re-anchor to the drone (auto again)
+              seededOffsetRef.current = offset;
+              setStartLngLat({ lat: displayLat, lng: displayLon });
             }}
+            offsetInfo={offsetInfo}
+            poseMode={poseMode}
+            poseHasAnchor={poseHasAnchor}
+            onStartPose={enterPoseMode}
+            onSavePositionOnly={savePositionOnly}
+            onCancelPose={exitPoseMode}
+            onResetOffset={resetOffset}
             waypointCount={waypointCount}
             distanceMeters={distanceMeters}
             areaHa={areaHa}

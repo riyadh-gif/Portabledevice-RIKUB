@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ArrowLeft, Route as RouteIcon, MapPinned } from "lucide-react";
@@ -12,6 +12,7 @@ import { setMissionPlan } from "@/lib/gcs/mission-plan";
 import { pushSprayMission, executeMission, cancelSprayMission } from "@/lib/gcs/api";
 import { ratesFromChambers } from "@/lib/gcs/spray-overlay";
 import { readFlightPlanInput } from "@/lib/gcs/flight-plan-input";
+import { LoadMissionFileButton } from "@/components/gcs/LoadMissionFileButton";
 import {
   useDroneOffset,
   setDroneOffset,
@@ -119,6 +120,7 @@ function poseGhostIcon(rotationDeg) {
 
 export function FlightPlan() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: diagnosticsData } = useDiagnostics();
   const offset = useDroneOffset();
   const drone = diagnosticsCoords(diagnosticsData); // RAW reported {lat, lon}
@@ -132,7 +134,7 @@ export function FlightPlan() {
   const displayLon = displayDrone?.lng ?? null;
   const displayHeading = applyOffsetToHeading(rawHeading, offset);
 
-  const [input] = useState(() => readFlightPlanInput());
+  const [input, setInput] = useState(() => readFlightPlanInput());
   const targets = useMemo(
     () => featuresToTargets(input?.featureCollection?.features),
     [input],
@@ -197,10 +199,39 @@ export function FlightPlan() {
       }
     : null;
 
+  // The empty-state "Muat Misi" loader calls navigate("/flight-plan") while the
+  // user is ALREADY on this route. A same-path history push does NOT remount the
+  // component (the app keys its route wrapper on pathname, not key), so the lazy
+  // useState above would never see the fresh hand-off. `location.key` changes on
+  // every push, so re-read the input whenever a *new* navigation lands here.
+  const initialLocationKey = useRef(location.key);
+  useEffect(() => {
+    if (location.key === initialLocationKey.current) return;
+    const next = readFlightPlanInput();
+    if (!next) return;
+    setInput(next);
+    setAngleDeg(defaultAngleDeg(featuresToTargets(next.featureCollection?.features)));
+    // Re-anchor the start flag to the drone for the freshly loaded field.
+    startFromDrone.current = true;
+    startSeeded.current = false;
+    seededOffsetRef.current = null;
+  }, [location.key]);
+
   // Create the interactive map once, draw the target polygons, fit the view.
   useEffect(() => {
     if (!hasTargets || !mapDiv.current || map.current) return;
-    const m = L.map(mapDiv.current, { zoomControl: true, maxZoom: 24 });
+    // Seed an initial view up-front. In the WebKitGTK kiosk the container can be
+    // 0-size at effect time; adding vector layers (the target polygon, the source
+    // waypoint track) to a view-less map then crashes Leaflet's _clipPoints on an
+    // undefined renderer bounds. A center/zoom in the options avoids that; the
+    // fitBounds below still refines the framing.
+    const initBounds = targetsBounds(targets);
+    const m = L.map(mapDiv.current, {
+      zoomControl: true,
+      maxZoom: 24,
+      center: initBounds ? [initBounds.cLat, initBounds.cLng] : [0, 0],
+      zoom: 18,
+    });
     map.current = m;
 
     const sat = BASE_LAYERS.satellite;
@@ -222,6 +253,29 @@ export function FlightPlan() {
         lineJoin: "round",
       },
     }).addTo(m);
+
+    // When the plan was loaded from a .waypoints file, draw the original
+    // imported waypoints as a faint reference track under the (re-planned)
+    // coverage path — so the user sees the source points the polygon was
+    // generated from. Static (part of `input`), so drawn once here.
+    const sourceWps = Array.isArray(input.sourceWaypoints) ? input.sourceWaypoints : [];
+    if (sourceWps.length >= 2) {
+      L.polyline(
+        sourceWps.map((w) => [w.lat, w.lng]),
+        { color: "#475569", weight: 1.5, opacity: 0.55, dashArray: "3 5", interactive: false },
+      ).addTo(m);
+      for (const w of sourceWps) {
+        L.circleMarker([w.lat, w.lng], {
+          radius: 2.5,
+          color: "#475569",
+          weight: 1,
+          opacity: 0.6,
+          fillColor: "#cbd5e1",
+          fillOpacity: 0.9,
+          interactive: false,
+        }).addTo(m);
+      }
+    }
 
     // Obstacles below, active draft above, pose-calibration overlay on top
     // (all above tiles, below path/markers).
@@ -629,16 +683,23 @@ export function FlightPlan() {
           <div className="text-xl font-black text-gray-950">Belum ada target semprot</div>
           <p className="mx-auto mt-1 max-w-sm text-sm font-semibold text-gray-500">
             Tetapkan obat untuk semua polygon di halaman Peta terlebih dahulu, lalu tekan
-            &ldquo;Mulai Perencanaan Terbang&rdquo;.
+            &ldquo;Mulai Perencanaan Terbang&rdquo; &mdash; atau muat langsung dari file
+            misi <code className="rounded bg-gray-100 px-1 py-0.5 text-[12px]">.waypoints</code>.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/maps")}
-          className="flex h-11 items-center gap-2 rounded-2xl bg-forest px-5 text-sm font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.2)] transition-colors hover:bg-house"
-        >
-          <ArrowLeft className="h-4 w-4" /> Kembali ke Peta
-        </button>
+        <div className="flex flex-col items-center gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => navigate("/maps")}
+            className="flex h-11 items-center gap-2 rounded-2xl bg-forest px-5 text-sm font-black text-white shadow-[0_10px_20px_rgba(0,98,65,0.2)] transition-colors hover:bg-house"
+          >
+            <ArrowLeft className="h-4 w-4" /> Kembali ke Peta
+          </button>
+          <LoadMissionFileButton
+            label="Muat Misi dari File"
+            className="flex h-11 items-center gap-2 rounded-2xl border border-emerald-900/15 bg-white px-5 text-sm font-black text-emerald-900 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-900/35 hover:bg-emerald-50 active:translate-y-0 disabled:opacity-60"
+          />
+        </div>
       </div>
     );
   }

@@ -42,6 +42,7 @@ import { SprayingRoutePanel } from "@/components/maps/spraying-route/SprayingRou
 import { FlightSettingsWidget } from "@/components/maps/spraying-route/FlightSettingsWidget";
 import { computeChamberGroups, defaultLaneSpacing } from "@/lib/gcs/chamber-groups";
 import { setFlightPlanInput } from "@/lib/gcs/flight-plan-input";
+import { LoadMissionFileButton } from "@/components/gcs/LoadMissionFileButton";
 import {
   BASE_BOUNDS,
   BASE_LAYERS,
@@ -1758,7 +1759,10 @@ export function Maps() {
             </div>
           </div>
         </div>
-        <div className="w-[86px]" />
+        <LoadMissionFileButton
+          label="Muat Misi"
+          className="flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-emerald-900/15 bg-white px-3 text-[13px] font-extrabold text-emerald-900 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-900/35 hover:bg-emerald-50 active:translate-y-0 disabled:opacity-60"
+        />
       </header>
 
       <DroneTelemetryProvider />

@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -46,6 +47,10 @@ class ApprovedZonesSaveRequest(BaseModel):
 class PolygonChambersUpdate(BaseModel):
     mode: str
     selected_chambers: list[str] | None = None
+    # Per-chamber application rate (dose), L/ha: {"fungisida": 40, "insektisida": 60}.
+    # Typed as Any (not float) so pydantic doesn't lax-coerce a JSON bool to 1.0
+    # before normalize_chamber_doses can reject it.
+    chamber_doses: dict[str, Any] | None = None
 
 
 class TargetDetectionCreate(BaseModel):
@@ -103,6 +108,35 @@ def normalize_chambers(values: list[str] | None) -> list[str]:
     return chambers
 
 
+def normalize_chamber_doses(
+    values: dict[str, float] | None, selected_chambers: list[str]
+) -> dict[str, float]:
+    """Keep only positive, finite doses for chambers that are actually selected.
+
+    Empty/invalid entries are dropped so the mission falls back to the default
+    rate (see web/src/lib/gcs/spray-overlay.js → DEFAULT_RATE_LPHA)."""
+    import math
+
+    allowed = set(selected_chambers)
+    doses: dict[str, float] = {}
+    for key, value in (values or {}).items():
+        chamber = str(key).strip().lower()
+        if chamber not in VALID_CHAMBERS or chamber not in allowed:
+            continue
+        # bool is a subclass of int/float — reject it explicitly so a JSON `true`
+        # can't slip through as 1.0 L/ha.
+        if isinstance(value, bool):
+            continue
+        try:
+            rate = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(rate) or rate <= 0:
+            continue
+        doses[chamber] = round(rate, 2)
+    return doses
+
+
 def auto_chambers_from_detections(polygon: SprayPolygon) -> list[str]:
     return normalize_chambers([
         detection.chamber
@@ -141,6 +175,7 @@ def spray_polygon_to_dict(polygon: SprayPolygon) -> dict:
         "settings": polygon.settings,
         "selected_chambers": polygon.selected_chambers or [],
         "chamber_mode": polygon.chamber_mode or "none",
+        "chamber_doses": polygon.chamber_doses or {},
         "detections": [detection_to_dict(item) for item in polygon.detections],
         "created_at": polygon.created_at.isoformat()
         if polygon.created_at
@@ -164,6 +199,7 @@ def spray_polygons_to_geojson(polygons: list[SprayPolygon]) -> dict:
                     "settings": polygon.settings,
                     "selected_chambers": polygon.selected_chambers or [],
                     "chamber_mode": polygon.chamber_mode or "none",
+                    "chamber_doses": polygon.chamber_doses or {},
                     "detections": [
                         detection_to_dict(item) for item in polygon.detections
                     ],
@@ -798,6 +834,7 @@ def save_ndvi_zones(
             settings=settings,
             selected_chambers=[],
             chamber_mode="none",
+            chamber_doses={},
         )
         db.add(polygon)
         polygons.append(polygon)
@@ -874,6 +911,13 @@ def update_polygon_chambers(
 
     polygon.selected_chambers = selected_chambers
     polygon.chamber_mode = mode
+    # Doses are only user-editable in manual mode; drop them otherwise so a
+    # stale rate never lingers on an auto/none zone.
+    polygon.chamber_doses = (
+        normalize_chamber_doses(payload.chamber_doses, selected_chambers)
+        if mode == "manual"
+        else {}
+    )
     db.commit()
     db.refresh(polygon)
     return spray_polygon_to_dict(polygon)

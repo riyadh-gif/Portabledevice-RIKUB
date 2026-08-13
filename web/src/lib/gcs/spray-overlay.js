@@ -26,12 +26,25 @@ export const PUMP_DRUGS = {
 /** Ramp used where both liquids are applied on the same spot. */
 export const BOTH_DRUG = { label: "Keduanya", ramp: ["#c4b5fd", "#8b5cf6", "#6d28d9"] };
 
-/** Selected chambers (drug keys) → per-pump application rates (L/ha). */
-export function ratesFromChambers(chambers, baseRate = DEFAULT_RATE_LPHA) {
+/**
+ * Selected chambers (drug keys) → per-pump application rates (L/ha).
+ *
+ * `doses` is either a per-chamber map captured in the UI (e.g.
+ * `{ fungisida: 40, insektisida: 60 }`) or a single numeric base rate applied to
+ * every selected pump. A missing / non-positive entry falls back to
+ * DEFAULT_RATE_LPHA so a selected chamber is never sprayed at zero.
+ */
+export function ratesFromChambers(chambers, doses = DEFAULT_RATE_LPHA) {
   const selected = new Set(Array.isArray(chambers) ? chambers : []);
+  const rateFor = (key) => {
+    const raw =
+      doses && typeof doses === "object" && !Array.isArray(doses) ? doses[key] : doses;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_RATE_LPHA;
+  };
   return {
-    right: selected.has(PUMP_DRUGS.right.key) ? baseRate : 0,
-    left: selected.has(PUMP_DRUGS.left.key) ? baseRate : 0,
+    right: selected.has(PUMP_DRUGS.right.key) ? rateFor(PUMP_DRUGS.right.key) : 0,
+    left: selected.has(PUMP_DRUGS.left.key) ? rateFor(PUMP_DRUGS.left.key) : 0,
   };
 }
 

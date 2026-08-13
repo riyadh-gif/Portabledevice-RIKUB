@@ -29,3 +29,5 @@ ndvi/
 downloads/
 cv_model/*.pt
 .claude
+
+*.mp4

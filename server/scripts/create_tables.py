@@ -17,6 +17,7 @@ def main() -> None:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS selected_chambers JSONB NOT NULL DEFAULT '[]'::jsonb"))
         conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS chamber_mode TEXT NOT NULL DEFAULT 'none'"))
+        conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS chamber_doses JSONB NOT NULL DEFAULT '{}'::jsonb"))
         conn.execute(text("ALTER TABLE spray_polygons DROP COLUMN IF EXISTS chamber"))
         conn.execute(text("ALTER TABLE target_detections ADD COLUMN IF NOT EXISTS disease_name TEXT"))
         # Backfill disease_name from the legacy `name` column, but only if that

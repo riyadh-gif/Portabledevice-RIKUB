@@ -624,7 +624,7 @@ export function FlightPlan() {
         zoneCode: target.zoneCode ?? null,
         polygon: target.ring.map((point) => [point.lat, point.lng]),
         chambers: target.chambers,
-        rates: ratesFromChambers(target.chambers),
+        rates: ratesFromChambers(target.chambers, target.chamberDoses),
       }));
       const sessionId = `spray-${Date.now().toString(36)}`;
       // The path/zones above are in the MAP frame (satellite imagery) — stored

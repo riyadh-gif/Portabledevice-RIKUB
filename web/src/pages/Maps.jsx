@@ -788,6 +788,31 @@ export function Maps() {
   const LBL = "font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#e11d48";
   const VAL = "font-size:12px;font-weight:800;color:#0f172a;margin-top:3px;font-variant-numeric:tabular-nums";
 
+  // Per-chamber dose (application rate, L/ha) input rows for the manual chamber
+  // panel. Lists exactly the currently-selected racun; re-rendered live as the
+  // user toggles chambers. An empty field means "use the default rate".
+  function doseRowsHtml(selectedChambers, doses) {
+    const selected = Array.isArray(selectedChambers) ? selectedChambers : [];
+    const rows = ["fungisida", "insektisida"].filter((chamber) => selected.includes(chamber));
+    if (rows.length === 0) {
+      return `<div style="font-size:10px;font-weight:700;color:#94a3b8;padding:2px 0">Pilih racun di atas untuk mengatur dosis.</div>`;
+    }
+    return rows
+      .map((chamber) => {
+        const value = Number(doses?.[chamber]);
+        const valueAttr = Number.isFinite(value) && value > 0 ? String(value) : "";
+        const label = escapeHtml(formatDisplayLabel(chamber));
+        return `<div style="display:flex;align-items:center;gap:10px">
+          <span style="flex:1;min-width:0;font-size:11px;font-weight:850;color:#0f172a">${label}</span>
+          <div style="position:relative;width:118px;flex:0 0 118px">
+            <input type="number" min="0" step="1" inputmode="decimal" class="jp-dose-input" data-chamber="${chamber}" value="${valueAttr}" placeholder="50" aria-label="Dosis ${label} (L/ha)" style="width:100%;height:34px;border:1.5px solid #e2e8f0;border-radius:10px;padding:0 42px 0 11px;font-size:12px;font-weight:800;color:#0f172a;box-sizing:border-box;background:#fff" />
+            <span style="position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:800;color:#94a3b8;pointer-events:none">L/ha</span>
+          </div>
+        </div>`;
+      })
+      .join("");
+  }
+
   function sprayTargetPopupHeader(zoneCode) {
     return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:8px">
@@ -823,6 +848,8 @@ export function Maps() {
       : [];
     const rawChamberMode = props?.chamber_mode ?? "none";
     const chamberMode = escapeHtml(rawChamberMode);
+    const chamberDoses =
+      props?.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {};
     const detections = Array.isArray(props?.detections) ? props.detections : [];
     const selectedChamberLabel = selectedChambers
       .map((item) => formatDisplayLabel(item))
@@ -931,6 +958,10 @@ export function Maps() {
         </div>
         <div class="jp-chamber-manual-panel" style="display:${rawChamberMode === "manual" ? "block" : "none"};margin-top:9px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${chamberOpts}</div>
+          <div style="margin-top:12px">
+            <div style="${LBL};margin-bottom:8px">Dosis Racun</div>
+            <div class="jp-dose-rows" style="display:flex;flex-direction:column;gap:9px">${doseRowsHtml(selectedChambers, chamberDoses)}</div>
+          </div>
         </div>
       </div>
       <div style="${DIV}"></div>
@@ -980,6 +1011,22 @@ export function Maps() {
     const modeLabel = el.querySelector(".jp-chamber-mode");
     const autoPanel = el.querySelector(".jp-chamber-auto-panel");
     const manualPanel = el.querySelector(".jp-chamber-manual-panel");
+    const doseRows = el.querySelector(".jp-dose-rows");
+    // Baseline of doses that are safely persisted, for the popupclose safety-net.
+    let lastDoseSnapshot = JSON.stringify(props?.chamber_doses ?? {});
+
+    function renderDoseRows() {
+      if (!doseRows) return;
+      // Don't rebuild while the user is typing in a dose field — replacing the
+      // innerHTML would drop focus/caret. The input listener keeps props in sync,
+      // so the live DOM is authoritative for the focused row.
+      const active = document.activeElement;
+      if (active?.classList?.contains("jp-dose-input") && doseRows.contains(active)) return;
+      const selected = Array.isArray(props?.selected_chambers) ? props.selected_chambers : [];
+      const doses =
+        props?.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {};
+      doseRows.innerHTML = doseRowsHtml(selected, doses);
+    }
 
     function paintMode(mode) {
       if (modeLabel) modeLabel.textContent = mode;
@@ -995,9 +1042,32 @@ export function Maps() {
       });
     }
 
-    function setPopupChamberState(next, mode = "manual") {
+    function setPopupChamberState(next, mode = "manual", doses) {
       props.selected_chambers = next;
       props.chamber_mode = mode;
+      if (doses && typeof doses === "object") {
+        const merged = { ...doses };
+        // A server echo can predate a value the user is still typing (a chamber
+        // toggle's PATCH was sent before this keystroke); keep the in-progress
+        // local value for the focused chamber so it isn't clobbered.
+        const active = document.activeElement;
+        if (active?.classList?.contains("jp-dose-input") && doseRows?.contains(active)) {
+          const chamber = active.dataset.chamber;
+          const localVal = props?.chamber_doses?.[chamber];
+          if (chamber && next.includes(chamber) && localVal != null) merged[chamber] = localVal;
+        }
+        props.chamber_doses = merged;
+      } else {
+        // No explicit doses given (local toggle): keep only those whose chamber
+        // is still selected so a deselected racun drops its dose.
+        const existing =
+          props?.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {};
+        const kept = {};
+        for (const chamber of next) {
+          if (existing[chamber] != null) kept[chamber] = existing[chamber];
+        }
+        props.chamber_doses = kept;
+      }
       paintMode(mode);
       el.querySelectorAll(".jp-chamber-opt").forEach((button) => {
         const active = next.includes(button.dataset.value);
@@ -1005,6 +1075,7 @@ export function Maps() {
         button.style.background = active ? "#fff1f2" : "#fff";
         button.style.color = active ? "#be123c" : "#334155";
       });
+      renderDoseRows();
     }
 
     const modeTrigger = el.querySelector(".jp-mode-trigger");
@@ -1028,15 +1099,15 @@ export function Maps() {
           const current = Array.isArray(props?.selected_chambers) ? props.selected_chambers : [];
           setPopupChamberState(current, "manual");
           if (props?.id && current.length) {
-            const updated = await updateSprayTargetChambers(props.id, { mode: "manual", selected_chambers: current });
-            if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "manual");
+            const updated = await updateSprayTargetChambers(props.id, { mode: "manual", selected_chambers: current, chamber_doses: props.chamber_doses || {} });
+            if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "manual", updated.chamber_doses);
           }
           return;
         }
         if (!props?.id) return;
         setPopupChamberState(Array.isArray(props?.selected_chambers) ? props.selected_chambers : [], "auto");
         const updated = await updateSprayTargetChambers(props.id, { mode: "auto" });
-        if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "auto");
+        if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "auto", updated.chamber_doses);
       });
     });
 
@@ -1054,11 +1125,75 @@ export function Maps() {
         if (props?.id) {
           const updated = await updateSprayTargetChambers(props.id, next.length === 0
             ? { mode: "none" }
-            : { mode: "manual", selected_chambers: next });
-          if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "none");
+            : { mode: "manual", selected_chambers: next, chamber_doses: props.chamber_doses || {} });
+          if (updated) setPopupChamberState(updated.selected_chambers || [], updated.chamber_mode || "none", updated.chamber_doses);
         }
       });
     });
+
+    // Dose (L/ha) fields — one per selected racun. Listeners are delegated on the
+    // container so they survive renderDoseRows() rebuilding its innerHTML. `input`
+    // keeps props fresh for an in-memory hand-off; `change` (blur/Enter) persists.
+    function applyDoseInput(target) {
+      const chamber = target?.dataset?.chamber;
+      if (!chamber) return;
+      const raw = target.value;
+      const num = Number(raw);
+      const doses =
+        props?.chamber_doses && typeof props.chamber_doses === "object"
+          ? { ...props.chamber_doses }
+          : {};
+      if (raw === "" || !Number.isFinite(num) || num <= 0) {
+        delete doses[chamber];
+      } else {
+        doses[chamber] = num;
+      }
+      props.chamber_doses = doses;
+    }
+
+    doseRows?.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!target?.classList?.contains("jp-dose-input")) return;
+      applyDoseInput(target);
+    });
+
+    doseRows?.addEventListener("change", async (event) => {
+      const target = event.target;
+      if (!target?.classList?.contains("jp-dose-input")) return;
+      applyDoseInput(target);
+      const selected = Array.isArray(props?.selected_chambers) ? props.selected_chambers : [];
+      if (!props?.id || selected.length === 0) return;
+      const updated = await updateSprayTargetChambers(props.id, {
+        mode: "manual",
+        selected_chambers: selected,
+        chamber_doses: props.chamber_doses || {},
+      });
+      // Sync props to the server-normalised doses, but don't re-render the rows —
+      // the user may still be editing an adjacent field.
+      if (updated?.chamber_doses && typeof updated.chamber_doses === "object") {
+        props.chamber_doses = updated.chamber_doses;
+      }
+      if (updated) lastDoseSnapshot = JSON.stringify(props?.chamber_doses ?? {});
+    });
+
+    // Safety net: a dose typed but never committed via `change` (e.g. the popup
+    // dismissed with Escape, which fires no change on a number input) would be
+    // lost on reload. Flush it on close if it differs from what was persisted.
+    // Gated on doseRows so it registers once (this attach runs again for the
+    // loading-spinner content, which has no dose rows).
+    if (doseRows) {
+      polygonLayer.once("popupclose", () => {
+        if (props?.chamber_mode !== "manual" || !props?.id) return;
+        const selected = Array.isArray(props?.selected_chambers) ? props.selected_chambers : [];
+        if (selected.length === 0) return;
+        if (JSON.stringify(props?.chamber_doses ?? {}) === lastDoseSnapshot) return;
+        updateSprayTargetChambers(props.id, {
+          mode: "manual",
+          selected_chambers: selected,
+          chamber_doses: props.chamber_doses || {},
+        });
+      });
+    }
 
     const slider = el.querySelector(".jp-det-slider");
     if (slider) {
@@ -1261,6 +1396,7 @@ export function Maps() {
       const patch = {
         selected_chambers: data.selected_chambers || [],
         chamber_mode: data.chamber_mode || "none",
+        chamber_doses: data.chamber_doses || {},
       };
       const targetLayer = sprayTargetLayerIndex.current[String(targetId)];
       if (targetLayer?.feature?.properties) {
@@ -1691,10 +1827,30 @@ export function Maps() {
     setRouteLaneSpacing(defaultLaneSpacing(nextAltitude));
   }
   function startFlightPlanning() {
+    // The popup mutates each Leaflet layer's feature.properties in place (chamber
+    // toggles, and especially a dose typed but not yet round-tripped to the DB),
+    // and those live objects can be fresher than React state — updateSprayTarget-
+    // Chambers replaces state elements with new objects, so later in-place edits
+    // don't reach `sprayTargetFeatures`. Overlay the live chamber/dose fields so
+    // the flown mission always matches what the user sees on the map.
+    const features = sprayTargetFeatures.map((feature) => {
+      const id = feature.properties?.id ?? feature.properties?.zone_code;
+      const liveProps = sprayTargetLayerIndex.current[String(id)]?.feature?.properties;
+      if (!liveProps) return feature;
+      return {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          selected_chambers: liveProps.selected_chambers ?? feature.properties?.selected_chambers,
+          chamber_mode: liveProps.chamber_mode ?? feature.properties?.chamber_mode,
+          chamber_doses: liveProps.chamber_doses ?? feature.properties?.chamber_doses,
+        },
+      };
+    });
     setFlightPlanInput({
       featureCollection: {
         type: "FeatureCollection",
-        features: sprayTargetFeatures,
+        features,
       },
       fieldName: selectedField?.name ?? null,
       createdAt: new Date().toISOString(),

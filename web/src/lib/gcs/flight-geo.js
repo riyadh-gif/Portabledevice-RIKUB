@@ -54,7 +54,7 @@ function outerRing(geometry) {
 /**
  * Normalise spray-target GeoJSON features into planning targets.
  * @param {Array} features GeoJSON features with polygon geometry
- * @returns {Array<{id, zoneCode, chambers: string[], areaM2: number, ring: Array<{lng, lat}>}>}
+ * @returns {Array<{id, zoneCode, chambers: string[], chamberDoses: Object, areaM2: number, ring: Array<{lng, lat}>}>}
  */
 export function featuresToTargets(features) {
   const targets = [];
@@ -66,6 +66,8 @@ export function featuresToTargets(features) {
       id: props.id ?? props.zone_code ?? targets.length,
       zoneCode: props.zone_code ?? null,
       chambers: Array.isArray(props.selected_chambers) ? props.selected_chambers : [],
+      chamberDoses:
+        props.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {},
       areaM2: Number(props.area_m2) || 0,
       ring,
     });

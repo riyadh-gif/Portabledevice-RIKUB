@@ -72,6 +72,9 @@ class SprayPolygon(Base):
     settings = Column(JSONB, nullable=False)
     selected_chambers = Column(JSONB, nullable=False, default=list)
     chamber_mode = Column(Text, nullable=False, default="none")
+    # Per-chamber application rate (dose) in L/ha, e.g. {"fungisida": 40, "insektisida": 60}.
+    # Set by the user in manual mode; empty means "use the default rate" downstream.
+    chamber_doses = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime, server_default=func.now())
 
     detections = relationship(

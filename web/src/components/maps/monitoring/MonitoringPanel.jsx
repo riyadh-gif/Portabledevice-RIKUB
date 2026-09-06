@@ -1,6 +1,6 @@
 import { Activity, Ban, Droplets, Gauge, Loader2, Navigation2, Radar, Satellite } from "lucide-react";
 import { gpsFixLabel } from "@/lib/gcs/diagnostics";
-import { PUMP_DRUGS, legendItems } from "@/lib/gcs/spray-overlay";
+import { PUMP_DRUGS, legendItems, chamberDisplayLabel } from "@/lib/gcs/spray-overlay";
 
 // Phase → badge appearance. Mirrors the spray lifecycle in docs/drone_api.md.
 const PHASE_META = {
@@ -68,8 +68,8 @@ function PumpCard({ drug, accent, pump }) {
   );
 }
 
-function Legend({ chambers }) {
-  const rows = legendItems(chambers);
+function Legend({ chambers, chamberProducts }) {
+  const rows = legendItems(chambers, chamberProducts);
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-2">
       <div className="mb-1.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -77,9 +77,14 @@ function Legend({ chambers }) {
       </div>
       <div className="space-y-1">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-bold text-slate-200">{row.label}</span>
-            <span className="flex overflow-hidden rounded-md ring-1 ring-white/10">
+          <div key={`${row.label}-${row.side ?? ""}`} className="flex items-center justify-between gap-2">
+            <span className="min-w-0 flex-1 truncate">
+              <span className="text-[10px] font-bold text-slate-200">{row.label}</span>
+              {row.side && (
+                <span className="ml-1 text-[9px] font-semibold text-slate-400">· {row.side}</span>
+              )}
+            </span>
+            <span className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/10">
               {row.ramp.map((c) => (
                 <span key={c} className="h-3 w-5" style={{ background: c }} />
               ))}
@@ -104,6 +109,7 @@ export function MonitoringPanel({
   stale,
   spray,
   chambers,
+  chamberProducts,
   onCancel,
   cancelling,
 }) {
@@ -185,17 +191,17 @@ export function MonitoringPanel({
         <div className="flex items-center gap-1.5 pt-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-300">
           <Droplets className="h-3 w-3" /> Pompa Semprot
         </div>
-        <PumpCard drug={PUMP_DRUGS.right.label} accent={PUMP_DRUGS.right.ramp[2]} pump={current?.right} />
-        <PumpCard drug={PUMP_DRUGS.left.label} accent={PUMP_DRUGS.left.ramp[2]} pump={current?.left} />
+        <PumpCard drug={chamberDisplayLabel(PUMP_DRUGS.right.key, chamberProducts)} accent={PUMP_DRUGS.right.ramp[2]} pump={current?.right} />
+        <PumpCard drug={chamberDisplayLabel(PUMP_DRUGS.left.key, chamberProducts)} accent={PUMP_DRUGS.left.ramp[2]} pump={current?.left} />
 
         {totals && (
           <div className="grid grid-cols-2 gap-1.5">
-            <StatTile label="Total F" value={num(totals.right_liters, 1)} unit="L" />
-            <StatTile label="Total I" value={num(totals.left_liters, 1)} unit="L" />
+            <StatTile label="Total Kanan" value={num(totals.right_liters, 1)} unit="L" />
+            <StatTile label="Total Kiri" value={num(totals.left_liters, 1)} unit="L" />
           </div>
         )}
 
-        <Legend chambers={chambers} />
+        <Legend chambers={chambers} chamberProducts={chamberProducts} />
       </div>
 
       {running && (

@@ -41,6 +41,8 @@ import { SprayTargetsPanel } from "@/components/maps/spray-targets/SprayTargetsP
 import { SprayingRoutePanel } from "@/components/maps/spraying-route/SprayingRoutePanel";
 import { FlightSettingsWidget } from "@/components/maps/spraying-route/FlightSettingsWidget";
 import { computeChamberGroups, defaultLaneSpacing } from "@/lib/gcs/chamber-groups";
+import { defaultRateForChamber, chamberDisplayLabel, chamberSideLabel } from "@/lib/gcs/spray-overlay";
+import { productById } from "@/lib/gcs/product-doses";
 import { setFlightPlanInput } from "@/lib/gcs/flight-plan-input";
 import { LoadMissionFileButton } from "@/components/gcs/LoadMissionFileButton";
 import {
@@ -79,6 +81,16 @@ export function Maps() {
   const sprayTargetsLayer = useRef(null);
   const sprayTargetLayerIndex = useRef({});
   const selectedSprayTargetLayer = useRef(null);
+  // Mirror of the selected field's chamber→product map so the (imperative) spray-
+  // target popup HTML builders can read the current per-chamber default dose
+  // without being re-created when the loadout changes.
+  const chamberProductsRef = useRef({});
+  // Latest selectedFieldId, readable inside async callbacks whose closure captured
+  // an older value (guards product-update completions against a field switch).
+  const selectedFieldIdRef = useRef("");
+  // Rebuilds the currently-open spray-target popup's dose rows (set while a popup
+  // is open), so a side-panel loadout change refreshes its placeholders/hints.
+  const openSprayPopupRefreshRef = useRef(null);
   const imageryCache = useRef({});
   const currentMarker = useRef(null);
   const fieldLocationMarker = useRef(null);
@@ -790,22 +802,33 @@ export function Maps() {
 
   // Per-chamber dose (application rate, L/ha) input rows for the manual chamber
   // panel. Lists exactly the currently-selected racun; re-rendered live as the
-  // user toggles chambers. An empty field means "use the default rate".
+  // user toggles chambers. An empty field means "use the chamber product's default
+  // rate" — which is what the placeholder shows (falling back to 50 L/ha when no
+  // product is loaded into that chamber).
   function doseRowsHtml(selectedChambers, doses) {
     const selected = Array.isArray(selectedChambers) ? selectedChambers : [];
     const rows = ["fungisida", "insektisida"].filter((chamber) => selected.includes(chamber));
     if (rows.length === 0) {
       return `<div style="font-size:10px;font-weight:700;color:#94a3b8;padding:2px 0">Pilih racun di atas untuk mengatur dosis.</div>`;
     }
+    const products = chamberProductsRef.current || {};
     return rows
       .map((chamber) => {
         const value = Number(doses?.[chamber]);
         const valueAttr = Number.isFinite(value) && value > 0 ? String(value) : "";
-        const label = escapeHtml(formatDisplayLabel(chamber));
+        const label = escapeHtml(chamberDisplayLabel(chamber, products));
+        const product = productById(products[chamber]);
+        const defaultRate = defaultRateForChamber(products[chamber]);
+        const productHint = product
+          ? `<div style="font-size:9px;font-weight:800;color:#94a3b8;margin-top:2px">${escapeHtml(chamberSideLabel(chamber))} · ${escapeHtml(product.activeIngredient)} · default ${defaultRate} L/ha</div>`
+          : `<div style="font-size:9px;font-weight:800;color:#cbd5e1;margin-top:2px">Belum ada produk · default ${defaultRate} L/ha</div>`;
         return `<div style="display:flex;align-items:center;gap:10px">
-          <span style="flex:1;min-width:0;font-size:11px;font-weight:850;color:#0f172a">${label}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:850;color:#0f172a">${label}</div>
+            ${productHint}
+          </div>
           <div style="position:relative;width:118px;flex:0 0 118px">
-            <input type="number" min="0" step="1" inputmode="decimal" class="jp-dose-input" data-chamber="${chamber}" value="${valueAttr}" placeholder="50" aria-label="Dosis ${label} (L/ha)" style="width:100%;height:34px;border:1.5px solid #e2e8f0;border-radius:10px;padding:0 42px 0 11px;font-size:12px;font-weight:800;color:#0f172a;box-sizing:border-box;background:#fff" />
+            <input type="number" min="0" step="1" inputmode="decimal" class="jp-dose-input" data-chamber="${chamber}" value="${valueAttr}" placeholder="${defaultRate}" aria-label="Dosis ${label} (L/ha)" style="width:100%;height:34px;border:1.5px solid #e2e8f0;border-radius:10px;padding:0 42px 0 11px;font-size:12px;font-weight:800;color:#0f172a;box-sizing:border-box;background:#fff" />
             <span style="position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:800;color:#94a3b8;pointer-events:none">L/ha</span>
           </div>
         </div>`;
@@ -852,7 +875,7 @@ export function Maps() {
       props?.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {};
     const detections = Array.isArray(props?.detections) ? props.detections : [];
     const selectedChamberLabel = selectedChambers
-      .map((item) => formatDisplayLabel(item))
+      .map((item) => chamberDisplayLabel(item, chamberProductsRef.current))
       .filter(Boolean)
       .join(", ");
     const autoStatus = detections.length === 0
@@ -866,7 +889,7 @@ export function Maps() {
     const chamberOpts = ["fungisida", "insektisida"]
       .map((opt) => {
         const active = selectedChambers.includes(opt);
-        return `<button type="button" class="jp-chamber-opt" data-value="${opt}" style="height:38px;border-radius:11px;border:1.5px solid ${active ? "#fb7185" : "#e2e8f0"};padding:0 10px;font-size:11px;font-weight:850;color:${active ? "#be123c" : "#334155"};cursor:pointer;background:${active ? "#fff1f2" : "#fff"};box-shadow:${active ? "inset 0 0 0 1px rgba(244,63,94,.08)" : "none"}">${escapeHtml(formatDisplayLabel(opt))}</button>`;
+        return `<button type="button" class="jp-chamber-opt" data-value="${opt}" style="height:38px;border-radius:11px;border:1.5px solid ${active ? "#fb7185" : "#e2e8f0"};padding:0 10px;font-size:11px;font-weight:850;color:${active ? "#be123c" : "#334155"};cursor:pointer;background:${active ? "#fff1f2" : "#fff"};box-shadow:${active ? "inset 0 0 0 1px rgba(244,63,94,.08)" : "none"}">${escapeHtml(chamberDisplayLabel(opt, chamberProductsRef.current))}</button>`;
       })
       .join("");
 
@@ -889,7 +912,7 @@ export function Maps() {
     } else {
       const cards = detections.map((d) => {
         const name = escapeHtml(formatDisplayLabel(d.disease_name) || "-");
-        const cat = escapeHtml(formatDisplayLabel(d.chamber) || "-");
+        const cat = escapeHtml(chamberDisplayLabel(d.chamber, chamberProductsRef.current) || "-");
         const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
         const confBar = conf != null
           ? `<div style="display:flex;align-items:center;gap:6px;margin-top:7px">
@@ -1026,6 +1049,17 @@ export function Maps() {
       const doses =
         props?.chamber_doses && typeof props.chamber_doses === "object" ? props.chamber_doses : {};
       doseRows.innerHTML = doseRowsHtml(selected, doses);
+    }
+
+    // Expose a refresh handle so a side-panel loadout change (updateChamberProduct)
+    // can re-render this open popup's dose placeholders/hints; cleared on close.
+    if (doseRows) {
+      openSprayPopupRefreshRef.current = renderDoseRows;
+      polygonLayer.once("popupclose", () => {
+        if (openSprayPopupRefreshRef.current === renderDoseRows) {
+          openSprayPopupRefreshRef.current = null;
+        }
+      });
     }
 
     function paintMode(mode) {
@@ -1420,6 +1454,57 @@ export function Maps() {
     }
   }
 
+  // Set (or clear, value=null) the product loaded into ONE chamber for the given
+  // field. Merges only that chamber's key — never a wholesale map replace — so a
+  // concurrent edit to the other chamber (or an out-of-order server echo) can't
+  // drop it. Also re-syncs the popup-facing ref + open popup, but only while the
+  // field is still selected (a slow request for a field we've left mustn't leak).
+  function mergeChamberProduct(fieldId, chamber, value) {
+    setFields((list) =>
+      list.map((field) => {
+        if (field.id !== fieldId) return field;
+        const next = { ...(field.chamber_products || {}) };
+        if (value) next[chamber] = value;
+        else delete next[chamber];
+        return { ...field, chamber_products: next };
+      }),
+    );
+    if (selectedFieldIdRef.current === fieldId) {
+      const next = { ...(chamberProductsRef.current || {}) };
+      if (value) next[chamber] = value;
+      else delete next[chamber];
+      chamberProductsRef.current = next;
+      openSprayPopupRefreshRef.current?.();
+    }
+  }
+
+  // Optimistic per-chamber update, then persist and reconcile that one chamber to
+  // the server's normalised value.
+  async function updateChamberProduct(chamber, productId) {
+    const fieldId = selectedFieldId;
+    if (!fieldId) return;
+    setSprayTargetsError("");
+    const previous = chamberProductsRef.current?.[chamber] ?? null;
+    mergeChamberProduct(fieldId, chamber, productId); // optimistic
+    try {
+      const res = await fetch(`/fields/${fieldId}/chamber-products`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chamber, product_id: productId }),
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data?.detail || "Gagal update produk chamber");
+      // Reconcile only this chamber to the server's authoritative value.
+      mergeChamberProduct(fieldId, chamber, data.chamber_products?.[chamber] ?? null);
+    } catch (err) {
+      mergeChamberProduct(fieldId, chamber, previous); // roll back this chamber
+      if (selectedFieldIdRef.current === fieldId) {
+        setSprayTargetsError(err.message || "Gagal update produk chamber");
+      }
+    }
+  }
+
   async function approveNdviZones() {
     if (!selectedImagery || ndviZoneFeatures.length === 0) return;
     setApproveZonesLoading(true);
@@ -1744,6 +1829,14 @@ export function Maps() {
     };
   }, []);
 
+  // Keep the popup-facing chamber-product ref in sync with the selected field so
+  // dose placeholders reflect the loaded product the moment a target is opened.
+  useEffect(() => {
+    selectedFieldIdRef.current = selectedFieldId;
+    const field = fields.find((item) => item.id === selectedFieldId);
+    chamberProductsRef.current = field?.chamber_products ?? {};
+  }, [fields, selectedFieldId]);
+
   const ndviCategories = ndviStats?.categories ?? DEFAULT_NDVI_CATEGORIES;
   const dominantNdvi = ndviCategories.reduce(
     (best, cat) =>
@@ -1853,6 +1946,7 @@ export function Maps() {
         features,
       },
       fieldName: selectedField?.name ?? null,
+      chamberProducts: selectedField?.chamber_products ?? {},
       createdAt: new Date().toISOString(),
     });
     navigate("/flight-plan");
@@ -2144,6 +2238,8 @@ export function Maps() {
                 readyCount={sprayReadyCount}
                 formatNumber={formatNumber}
                 onFocusTarget={focusSprayTarget}
+                chamberProducts={selectedField?.chamber_products ?? {}}
+                onChamberProductChange={updateChamberProduct}
               />
             )}
 

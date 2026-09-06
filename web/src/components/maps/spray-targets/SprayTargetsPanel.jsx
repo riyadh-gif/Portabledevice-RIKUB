@@ -1,18 +1,15 @@
 import { Loader2, MapPin } from "lucide-react";
 
+import { PRODUCTS, productById } from "@/lib/gcs/product-doses";
+import { chamberDisplayLabel } from "@/lib/gcs/spray-overlay";
 
-function formatDisplayLabel(value) {
-  return String(value ?? "")
-    .trim()
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function formatChambers(chambers) {
-  return chambers.map(formatDisplayLabel).filter(Boolean).join(", ");
-}
+// Chambers are physical tanks (Kanan/Kiri = right/left pump); the stored keys stay
+// "fungisida"/"insektisida" but the operator picks the loadout by side, and every
+// per-area surface shows the loaded product's name instead.
+const CHAMBERS = [
+  { key: "fungisida", label: "Kanan" },
+  { key: "insektisida", label: "Kiri" },
+];
 
 function Stat({ label, value, tone = "rose" }) {
   const colors =
@@ -32,6 +29,54 @@ function Stat({ label, value, tone = "rose" }) {
   );
 }
 
+function ChamberLoadout({ chamberProducts, onChamberProductChange }) {
+  if (!onChamberProductChange) return null;
+  const products = chamberProducts && typeof chamberProducts === "object" ? chamberProducts : {};
+  return (
+    <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/60 p-2.5">
+      <div className="text-[9px] font-black uppercase tracking-[0.12em] text-rose-600">
+        Muatan Chamber
+      </div>
+      <div className="mt-0.5 text-[10px] font-semibold text-gray-500">
+        Produk tiap chamber menentukan dosis default
+      </div>
+      <div className="mt-2 flex flex-col gap-2">
+        {CHAMBERS.map(({ key, label }) => {
+          const productId = products[key] ?? "";
+          const product = productById(productId);
+          return (
+            <div key={key}>
+              <div className="flex items-center gap-2">
+                <span className="w-[74px] shrink-0 text-[11px] font-black text-gray-800">
+                  {label}
+                </span>
+                <select
+                  value={productId}
+                  onChange={(event) => onChamberProductChange(key, event.target.value || null)}
+                  className="h-8 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-900 focus:border-rose-400 focus:outline-none"
+                  aria-label={`Produk chamber ${label}`}
+                >
+                  <option value="">— Kosong —</option>
+                  {PRODUCTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {product && (
+                <div className="mt-1 pl-[82px] text-[9px] font-bold text-rose-500">
+                  {product.activeIngredient} · dosis default {product.rateLpha} L/ha
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function SprayTargetsPanel({
   panelSwitch,
   loading,
@@ -41,6 +86,8 @@ export function SprayTargetsPanel({
   readyCount,
   formatNumber,
   onFocusTarget,
+  chamberProducts,
+  onChamberProductChange,
 }) {
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
@@ -68,6 +115,10 @@ export function SprayTargetsPanel({
         <Stat label="Area" value={formatNumber(totalAreaM2)} />
         <Stat label="Ready" value={readyCount} tone="emerald" />
       </div>
+      <ChamberLoadout
+        chamberProducts={chamberProducts}
+        onChamberProductChange={onChamberProductChange}
+      />
       {features.length > 0 && (
         <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="grid grid-cols-[58px_minmax(0,1fr)_92px_54px] items-center justify-items-center gap-2 border-b border-gray-100 bg-gray-50 px-2.5 py-2">
@@ -91,7 +142,10 @@ export function SprayTargetsPanel({
               const selectedChambers = Array.isArray(props.selected_chambers)
                 ? props.selected_chambers
                 : [];
-              const chamberLabel = formatChambers(selectedChambers);
+              const chamberLabel = selectedChambers
+                .map((key) => chamberDisplayLabel(key, chamberProducts))
+                .filter(Boolean)
+                .join(", ");
               return (
                 <div
                   key={targetId}

@@ -187,6 +187,15 @@ export function FlightPlan() {
     for (const target of targets) for (const c of target.chambers) set.add(c);
     return [...set];
   }, [targets]);
+  // Field-wide product loaded into each chamber (from the Maps hand-off); drives
+  // each chamber's default dose when a zone has no explicit override.
+  const chamberProducts = useMemo(
+    () =>
+      input?.chamberProducts && typeof input.chamberProducts === "object"
+        ? input.chamberProducts
+        : {},
+    [input],
+  );
 
   // Human-readable summary of the active GPS drift for the calibration panel.
   const offsetAtLat = displayLat ?? targetsBounds(targets)?.cLat ?? 0;
@@ -624,7 +633,7 @@ export function FlightPlan() {
         zoneCode: target.zoneCode ?? null,
         polygon: target.ring.map((point) => [point.lat, point.lng]),
         chambers: target.chambers,
-        rates: ratesFromChambers(target.chambers, target.chamberDoses),
+        rates: ratesFromChambers(target.chambers, target.chamberDoses, chamberProducts),
       }));
       const sessionId = `spray-${Date.now().toString(36)}`;
       // The path/zones above are in the MAP frame (satellite imagery) — stored
@@ -645,6 +654,7 @@ export function FlightPlan() {
         geoWaypoints,
         zones,
         chambers,
+        chamberProducts,
         swathWidthM: laneSpacing,
         altitude,
         laneSpacing,

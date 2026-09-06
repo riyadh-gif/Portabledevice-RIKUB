@@ -12,6 +12,11 @@ class Field(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(Text, nullable=False)
+    # Product loaded into each physical spray chamber for this field/mission, e.g.
+    # {"fungisida": "kontaf-50-sc", "insektisida": "starner-20-wp"}. Drives the
+    # default per-chamber dose (see server/app/routes/fields.py → PRODUCT_DOSES and
+    # web/src/lib/gcs/product-doses.js). A missing chamber means "no product set".
+    chamber_products = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime, server_default=func.now())
 
     imagery = relationship(

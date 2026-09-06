@@ -311,6 +311,7 @@ export function Monitoring() {
             stale={stale}
             spray={sprayStatus}
             chambers={plan?.chambers ?? null}
+            chamberProducts={plan?.chamberProducts ?? null}
             onCancel={handleCancel}
             cancelling={cancelling}
           />

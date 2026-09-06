@@ -7,7 +7,10 @@
 export const FLIGHT_PLAN_INPUT_KEY = "soerogis:flight-plan-input";
 
 /**
- * @param {{ featureCollection: object, fieldName?: string, createdAt?: string }} input
+ * @param {{ featureCollection: object, fieldName?: string,
+ *   chamberProducts?: Object, createdAt?: string }} input
+ *   chamberProducts maps a chamber (drug key) to a product id, e.g.
+ *   `{ fungisida: "kontaf-50-sc" }`, used to derive per-chamber default doses.
  */
 export function setFlightPlanInput(input) {
   if (typeof window === "undefined") return;

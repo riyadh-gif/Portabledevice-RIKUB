@@ -17,6 +17,7 @@ Run:
     python3 webview_launcher.py --fullscreen   # kiosk
 """
 import argparse
+import fcntl
 import os
 import ssl
 import time
@@ -32,6 +33,25 @@ from webview.platforms.gtk import BrowserView, add_tls_cert
 
 URL = "https://127.0.0.1:8000"
 CERTFILE = "/home/pi/rikub-project/certs/cert.pem"
+
+# Single-instance guard: a second launch (a manual start, or a systemd restart
+# racing a stray) would open another fullscreen window on the same compositor and
+# make the app look frozen (two stacked windows fighting for input). Hold an
+# exclusive flock for the whole process lifetime; a duplicate that can't take it
+# exits immediately instead of stacking. _lock_handle is module-global so the fd
+# (and thus the lock) survives until the process ends.
+_LOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "jaga-padi-kiosk.lock")
+_lock_handle = None
+
+
+def acquire_single_instance_lock():
+    global _lock_handle
+    _lock_handle = open(_LOCK_PATH, "w")
+    try:
+        fcntl.flock(_lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("Jaga Padi kiosk already running; this duplicate will exit.", flush=True)
+        raise SystemExit(0)
 
 # Fullscreen kiosk mode has no title bar/close button - without this, closing
 # the window means SSH in and `pkill -f webview_launcher.py`. Esc calls back
@@ -76,6 +96,7 @@ def main():
     parser.add_argument("--height", type=int, default=720)
     args = parser.parse_args()
 
+    acquire_single_instance_lock()
     wait_for_backend()
     add_tls_cert(CERTFILE)
     window = webview.create_window(

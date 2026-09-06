@@ -53,6 +53,14 @@ class PolygonChambersUpdate(BaseModel):
     chamber_doses: dict[str, Any] | None = None
 
 
+class ChamberProductsUpdate(BaseModel):
+    # Either set one chamber ({"chamber": "fungisida", "product_id": "kontaf-50-sc"};
+    # product_id null/"" clears it) or replace the whole map ({"chamber_products": {...}}).
+    chamber: str | None = None
+    product_id: str | None = None
+    chamber_products: dict[str, Any] | None = None
+
+
 class TargetDetectionCreate(BaseModel):
     disease_name: str
     confidence: float | None = None
@@ -66,6 +74,7 @@ def field_to_dict(field: Field) -> dict:
     return {
         "id": str(field.id),
         "name": field.name,
+        "chamber_products": field.chamber_products or {},
         "created_at": field.created_at.isoformat() if field.created_at else None,
     }
 
@@ -90,6 +99,34 @@ def imagery_to_dict(imagery: FieldImagery) -> dict:
 
 VALID_CHAMBERS = {"fungisida", "insektisida"}
 VALID_CHAMBER_MODES = {"none", "auto", "manual"}
+
+# Reference product catalogue — mirror of web/src/lib/gcs/product-doses.js
+# (derived from ref_dose.jpeg). The backend only needs the ids for validation and
+# the default rate; the frontend holds the full display catalogue. Keep ids in sync.
+# rate_lpha = "Volume Akhir per m²" (L/m²) × 10_000.
+PRODUCT_DOSES = {
+    "kontaf-50-sc": {"name": "Kontaf 50 SC", "rate_lpha": 150},
+    "benlox-50-wp": {"name": "Benlox 50 WP", "rate_lpha": 500},
+    "dithane-m-45": {"name": "Dithane M-45", "rate_lpha": 500},
+    "cabzim-500-sc": {"name": "Cabzim 500 SC", "rate_lpha": 500},
+    "fenosida-255-ec": {"name": "Fenosida 255 EC", "rate_lpha": 500},
+    "besun-elite-300-sc": {"name": "Besun Elite 300 SC", "rate_lpha": 500},
+    "starner-20-wp": {"name": "Starner 20 WP", "rate_lpha": 200},
+}
+VALID_PRODUCT_IDS = set(PRODUCT_DOSES)
+
+
+def normalize_chamber_products(values: dict[str, Any] | None) -> dict[str, str]:
+    """Keep only {valid chamber: known product id} pairs; drop everything else."""
+    result: dict[str, str] = {}
+    for key, value in (values or {}).items():
+        chamber = str(key).strip().lower()
+        if chamber not in VALID_CHAMBERS or value is None:
+            continue
+        product_id = str(value).strip().lower()
+        if product_id and product_id in VALID_PRODUCT_IDS:
+            result[chamber] = product_id
+    return result
 
 
 def normalize_chambers(values: list[str] | None) -> list[str]:
@@ -875,6 +912,57 @@ def list_spray_targets(
         "polygons": [spray_polygon_to_dict(polygon) for polygon in polygons],
         "geojson": spray_polygons_to_geojson(polygons),
     }
+
+
+@router.patch("/{field_id}/chamber-products")
+def update_field_chamber_products(
+    field_id: UUID,
+    payload: ChamberProductsUpdate,
+    db: Session = Depends(get_db),
+) -> dict:
+    # Lock the row for the whole read-modify-write: this is a sync endpoint run in
+    # FastAPI's threadpool, so two concurrent single-chamber PATCHes could each read
+    # the pre-update JSONB map and the later commit would blindly drop the other
+    # chamber's product. FOR UPDATE serialises them so the second re-reads first.
+    field = db.query(Field).filter(Field.id == field_id).with_for_update().first()
+    if field is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Field not found: {field_id}",
+        )
+
+    if payload.chamber_products is not None:
+        current = normalize_chamber_products(payload.chamber_products)
+    elif payload.chamber is not None:
+        chamber = payload.chamber.strip().lower()
+        if chamber not in VALID_CHAMBERS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported chamber: {payload.chamber}",
+            )
+        current = dict(field.chamber_products or {})
+        product_id = (payload.product_id or "").strip().lower()
+        if product_id:
+            if product_id not in VALID_PRODUCT_IDS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported product: {payload.product_id}",
+                )
+            current[chamber] = product_id
+        else:
+            current.pop(chamber, None)
+        # Drop any legacy/invalid entries that may predate the current catalogue.
+        current = normalize_chamber_products(current)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="chamber or chamber_products is required",
+        )
+
+    field.chamber_products = current
+    db.commit()
+    db.refresh(field)
+    return field_to_dict(field)
 
 
 @polygon_router.patch("/{polygon_id}/chambers")

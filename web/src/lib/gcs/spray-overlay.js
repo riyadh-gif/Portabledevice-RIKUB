@@ -10,6 +10,8 @@
 // flow so heavier dosing reads darker. Pure module — no React, no Leaflet — so
 // the same mapping is shared by the flight-plan hand-off and the overlay legend.
 
+import { productById, productRateLpha } from "@/lib/gcs/product-doses";
+
 /** Default per-liquid application rate (L/ha) assigned when a zone selects a
  *  drug but the UI never captured a numeric dose. */
 export const DEFAULT_RATE_LPHA = 50;
@@ -26,26 +28,71 @@ export const PUMP_DRUGS = {
 /** Ramp used where both liquids are applied on the same spot. */
 export const BOTH_DRUG = { label: "Keduanya", ramp: ["#c4b5fd", "#8b5cf6", "#6d28d9"] };
 
+// Any product may be loaded into either chamber, so the old "Fungisida"/"Insektisida"
+// names are just the stored keys now — not what the operator sees. Loadout is chosen
+// by physical pump side (Kanan/Kiri); everywhere a chamber is selected or monitored we
+// show the loaded product's name instead, falling back to the side when none is set.
+export const CHAMBER_SIDE_LABEL = {
+  [PUMP_DRUGS.right.key]: "Kanan",
+  [PUMP_DRUGS.left.key]: "Kiri",
+};
+
+/** Physical pump side ("Kanan"/"Kiri") for a chamber (drug) key. */
+export function chamberSideLabel(chamberKey) {
+  return CHAMBER_SIDE_LABEL[chamberKey] ?? String(chamberKey ?? "");
+}
+
+/** Operator-facing label for a chamber: the loaded product's name, else its side. */
+export function chamberDisplayLabel(chamberKey, chamberProducts) {
+  const products =
+    chamberProducts && typeof chamberProducts === "object" ? chamberProducts : {};
+  const product = productById(products[chamberKey]);
+  return product ? product.name : chamberSideLabel(chamberKey);
+}
+
 /**
  * Selected chambers (drug keys) → per-pump application rates (L/ha).
  *
+ * Rate resolution per chamber (first that is a positive number wins):
+ *   1. explicit dose typed by the user (`doses[key]`)
+ *   2. the default rate of the product loaded into that chamber
+ *      (`chamberProducts[key]` → product-doses catalogue)
+ *   3. DEFAULT_RATE_LPHA — so a selected chamber is never sprayed at zero.
+ *
  * `doses` is either a per-chamber map captured in the UI (e.g.
  * `{ fungisida: 40, insektisida: 60 }`) or a single numeric base rate applied to
- * every selected pump. A missing / non-positive entry falls back to
- * DEFAULT_RATE_LPHA so a selected chamber is never sprayed at zero.
+ * every selected pump. `chamberProducts` maps a chamber (drug key) to a product
+ * id (e.g. `{ fungisida: "kontaf-50-sc" }`).
  */
-export function ratesFromChambers(chambers, doses = DEFAULT_RATE_LPHA) {
+export function ratesFromChambers(chambers, doses = undefined, chamberProducts = undefined) {
   const selected = new Set(Array.isArray(chambers) ? chambers : []);
+  const products =
+    chamberProducts && typeof chamberProducts === "object" && !Array.isArray(chamberProducts)
+      ? chamberProducts
+      : {};
   const rateFor = (key) => {
     const raw =
       doses && typeof doses === "object" && !Array.isArray(doses) ? doses[key] : doses;
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? value : DEFAULT_RATE_LPHA;
+    const explicit = Number(raw);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    const productRate = productRateLpha(products[key]);
+    if (Number.isFinite(productRate) && productRate > 0) return productRate;
+    return DEFAULT_RATE_LPHA;
   };
   return {
     right: selected.has(PUMP_DRUGS.right.key) ? rateFor(PUMP_DRUGS.right.key) : 0,
     left: selected.has(PUMP_DRUGS.left.key) ? rateFor(PUMP_DRUGS.left.key) : 0,
   };
+}
+
+/**
+ * Default application rate (L/ha) for a chamber given the product loaded into it,
+ * or DEFAULT_RATE_LPHA when no product is set. Used by the UI to show/placeholder
+ * the effective dose before the user types an override.
+ */
+export function defaultRateForChamber(productId) {
+  const rate = productRateLpha(productId);
+  return Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_RATE_LPHA;
 }
 
 /** A pump counts as actively spraying when it is commanded or measuring flow. */
@@ -99,16 +146,22 @@ export function sampleLeafletStyle(color) {
 
 /**
  * Legend rows for the drugs present in a mission. When `chambers` is null/unknown
- * the full two-drug legend is shown.
+ * the full two-drug legend is shown. Each pump row is labelled by its loaded
+ * product name (from `chamberProducts`, e.g. `{ fungisida: "kontaf-50-sc" }`),
+ * with the physical side ("Kanan"/"Kiri") as a sub-label / fallback.
  */
-export function legendItems(chambers) {
+export function legendItems(chambers, chamberProducts = null) {
   const known = Array.isArray(chambers);
   const selected = new Set(known ? chambers : []);
   const rows = [];
   for (const pump of ["right", "left"]) {
     const drug = PUMP_DRUGS[pump];
-    if (!known || selected.has(drug.key)) rows.push({ label: drug.label, ramp: drug.ramp });
+    if (!known || selected.has(drug.key)) {
+      const side = chamberSideLabel(drug.key);
+      const label = chamberDisplayLabel(drug.key, chamberProducts);
+      rows.push({ label, side: label === side ? null : side, ramp: drug.ramp });
+    }
   }
-  if (rows.length === 2) rows.push({ label: BOTH_DRUG.label, ramp: BOTH_DRUG.ramp });
+  if (rows.length === 2) rows.push({ label: BOTH_DRUG.label, side: null, ramp: BOTH_DRUG.ramp });
   return rows;
 }

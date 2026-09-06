@@ -15,6 +15,7 @@ def main() -> None:
 
     Base.metadata.create_all(bind=engine)
     with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE fields ADD COLUMN IF NOT EXISTS chamber_products JSONB NOT NULL DEFAULT '{}'::jsonb"))
         conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS selected_chambers JSONB NOT NULL DEFAULT '[]'::jsonb"))
         conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS chamber_mode TEXT NOT NULL DEFAULT 'none'"))
         conn.execute(text("ALTER TABLE spray_polygons ADD COLUMN IF NOT EXISTS chamber_doses JSONB NOT NULL DEFAULT '{}'::jsonb"))

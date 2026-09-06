@@ -300,8 +300,82 @@ These predate the standard-command endpoints and remain unchanged:
 | RPC | Model | Purpose |
 |-----|-------|---------|
 | `PushMission` | Blocking | Upload a waypoint list to the FCU (does not fly it). |
-| `ExecuteMission` | Fire-and-poll | Arm → takeoff → `AUTO` to run the uploaded mission. Accepts an optional `job_id` (or `session_id`) that `Diagnostics` reports as the active job while the mission runs. |
+| `ExecuteMission` | Fire-and-poll | Arm → takeoff → `AUTO` to run the uploaded mission. Accepts an optional `job_id` (or `session_id`) that `Diagnostics` reports as the active job while the mission runs. The `mode` selects the mission kind: `"spraying"` (reactive spray loop) or `"mapping"` (photo-capture survey). |
 | `MissionStatus` | Blocking | Return the current status object (use it to poll all fire-and-poll commands). |
+
+---
+
+## Mapping capture mission
+
+Fly a **photogrammetry survey**: the frontend uploads a set of discrete capture
+(photo) stations; the backend flies them as a `LOITER_UNLIM` mission, triggering
+a photo at each. At mission end the mapping monitor auto-creates a
+`MappingJobService` **session** (`CreateSession` + `StartStitching`) from the
+captured frames, so the run appears in `ListJobs` with no extra client call —
+see [mapping.md](mapping.md). Tie a flight to its session via
+`MappingMissionStatus.odm_job_id`.
+
+**Lifecycle** (mirrors the spraying flow):
+
+```text
+PushCaptureMission { capture_points, altitude, hold_time, session_id }  # upload LOITER_UNLIM survey
+ExecuteMission     { mode: "mapping", job_id }                          # arm → takeoff → AUTO
+MappingMissionStatus {}                                                  # poll captures + odm_job_id
+```
+
+### `PushCaptureMission`
+
+Upload a discrete-capture-point mapping mission. **Blocking** (bounded by
+`timeout`); returns the status object. Refused with `FAILED_PRECONDITION` while a
+mapping **or** spray session is already active.
+
+**Request**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `capture_points` | `[{lat, lng}, …]` | — | **Required.** Ordered photo stations; the drone visits each in turn, holding for a capture. |
+| `altitude` | float | `5.0` | Survey altitude (m AGL). |
+| `hold_time` | float | `0.0` | Seconds to loiter at each station before capturing / moving on. |
+| `session_id` | string | auto | Session id (also accepted as `job_id`); pass the same value as `ExecuteMission`'s `job_id`. |
+
+```json
+{
+  "session_id": "map-abc123",
+  "altitude": 40.0, "hold_time": 2.0,
+  "capture_points": [
+    { "lat": -7.2750, "lng": 112.7946 },
+    { "lat": -7.2748, "lng": 112.7946 },
+    { "lat": -7.2748, "lng": 112.7950 }
+  ]
+}
+```
+
+**Response:** status object. Then call `ExecuteMission { "mode": "mapping", "job_id": "map-abc123" }`.
+
+### `MappingMissionStatus`
+
+Poll the capture mission's progress. **Read-only**, never aborts.
+
+**Request:** `{}`
+
+**Response**
+
+```json
+{
+  "running": true, "session_id": "map-abc123", "phase": "capturing",
+  "captures_done": 12, "total_captures": 48,
+  "odm_job_id": "", "last_error": ""
+}
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `running` | bool | A capture mission is armed/flying. |
+| `session_id` | string | The armed mission's id (the `PushCaptureMission` value). |
+| `phase` | string | `idle` → `arming` → `capturing` → `complete` / `failed` / `canceled`. |
+| `captures_done` / `total_captures` | int | Photos taken so far / total stations. |
+| `odm_job_id` | string | The created `MappingJobService` session id, **populated at mission end** (empty while flying). Resolve it with `GetJob` / `GET /api/jobs/{id}`. |
+| `last_error` | string | Failure reason, or empty. |
 
 ---
 

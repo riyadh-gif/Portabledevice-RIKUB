@@ -113,6 +113,38 @@ export async function executeMission(p = {}) {
   );
 }
 
+// --- Mapping capture mission (see docs/mapping.md → "drone capture pipeline") -
+
+// Upload a discrete-capture-point mapping mission (PushCaptureMission): a
+// LOITER_UNLIM mission visiting each { lat, lng } station, holding for a photo.
+// Blocking upload; returns the drone status. Follow with
+// executeMission({ mode: "mapping", jobId }) to fly it.
+export async function pushCaptureMission(p) {
+  return jsonOrThrow(
+    await fetch("/api/drone/mapping-mission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...droneAddrHeaders() },
+      body: JSON.stringify({
+        capture_points: p.capturePoints,
+        altitude: p.altitude,
+        hold_time: p.holdTime,
+        session_id: p.sessionId,
+      }),
+    }),
+  );
+}
+
+// Read-only poll of the mapping capture mission. When `odm_job_id` is set the
+// backend has created the ODM session — resolve it via fetchJob(odm_job_id).
+export async function fetchMappingMissionStatus() {
+  return jsonOrThrow(
+    await fetch("/api/drone/mapping-mission", {
+      cache: "no-store",
+      headers: droneAddrHeaders(),
+    }),
+  );
+}
+
 // --- Reactive spraying (see docs/drone_api.md → "Spraying pipeline") ---------
 
 // Poll the reactive spray session. Pass the previous response's `next_seq` back

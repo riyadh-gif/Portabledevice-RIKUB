@@ -86,6 +86,51 @@ async def execute_mission(request: Request):
     )
 
 
+@router.post("/mapping-mission")
+async def push_capture_mission(request: Request):
+    """Upload a discrete-capture-point mapping mission (PushCaptureMission): a
+    LOITER_UNLIM mission that visits each `{lat,lng}` capture station in order,
+    holding for a photo. Blocking upload — returns the drone status object. Then
+    call `POST /api/drone/mission/execute` with `{mode: "mapping", job_id}` to
+    fly it. See docs/mapping.md (drone capture pipeline) + docs/drone_api.md."""
+    body = await _read_json(request)
+    points = body.get("capture_points") or []
+    valid = [
+        {"lat": p["lat"], "lng": p["lng"]}
+        for p in points
+        if isinstance(p, dict)
+        and isinstance(p.get("lat"), (int, float))
+        and isinstance(p.get("lng"), (int, float))
+    ]
+    if not valid:
+        raise HTTPException(
+            status_code=400,
+            detail="capture_points must be a non-empty array of { lat, lng } numbers",
+        )
+
+    payload: dict[str, Any] = {
+        "capture_points": valid,
+        "altitude": body.get("altitude"),
+        "hold_time": body.get("hold_time"),
+        "session_id": body.get("session_id"),
+    }
+    payload = {key: value for key, value in payload.items() if value is not None}
+    return call_grpc(
+        f"{DRONE}/PushCaptureMission", payload, timeout=70, addr=drone_addr_from_request(request)
+    )
+
+
+@router.get("/mapping-mission")
+def mapping_mission_status(request: Request):
+    """Read-only poll of the mapping capture mission's progress
+    (MappingMissionStatus): `{running, session_id, phase, captures_done,
+    total_captures, odm_job_id, last_error}`. `odm_job_id` is populated at
+    mission end — resolve it to a session via `GET /api/jobs/{id}`."""
+    return call_grpc(
+        f"{DRONE}/MappingMissionStatus", {}, timeout=30, addr=drone_addr_from_request(request)
+    )
+
+
 @router.get("/spray/status")
 def spray_status(
     request: Request,

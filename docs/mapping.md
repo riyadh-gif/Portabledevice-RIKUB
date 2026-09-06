@@ -30,11 +30,27 @@ task by `backend_ref`).
 ```
 data/sessions/<id>/
   metadata.json      # session state (the response object below)
-  raw/               # input tiffs — saved into the backend before any stitch
+  raw/               # input images (.jpg/.jpeg/.png/.tif/.tiff), saved before any stitch
   stitched.tif       # ODM orthophoto, copied out of odm/
-  clusters.kml       # vegetation-cluster polygons (clustering step — deferred)
+  clusters.kml       # vegetation-cluster polygons (mapping.generate_kml)
   odm/               # full NodeODM asset bundle
 ```
+
+### Where sessions come from
+
+Two producers write into the same registry, so `ListJobs`/`GetJob` see both:
+
+1. **A client**, via `CreateSession` / `CreateOdmJob` (below).
+2. **The drone capture pipeline** — `DroneService.PushCaptureMission` (see
+   [drone_api.md](drone_api.md)). At mission end the mapping monitor calls
+   `CreateSession` + `StartStitching` itself against the *shared* `SessionStore`,
+   so a flight-created session **appears in `ListJobs` with no client call**. Its
+   `name` is the capture session id (`mapping-<hex>`); `area_name` and
+   `captured_at` are empty. To tie a flight to its session, read
+   `MappingMissionStatus.odm_job_id`.
+
+Capture-produced `raw/` folders hold **PNG** frames (demosaiced from MAPIR
+`.RAW`), not tiffs — don't filter the listing on `.tif`.
 
 ### Two-phase flow
 
@@ -53,17 +69,18 @@ Photos are saved into the backend **first**, then stitched:
 
 ```
 unstitched ──StartStitching──▶ stitching ──ODM done──▶ clustering ──▶ ready
-                                   │                                    
-                                   └────────────▶ failed / canceled
+                                   │                        │
+                                   │                        └──▶ failed
+                                   └──▶ failed / canceled
 ```
 
 | Status | Meaning |
 |--------|---------|
 | `unstitched` | Session created, `raw/` present, no stitch started. |
-| `stitching` | ODM task queued/running on NodeODM. `progress` advances 0.0→1.0. |
-| `clustering` | `stitched.tif` is ready; the `generate_kml` clustering step turns it into `clusters.kml`. **Currently deferred** — sessions rest here until clustering is wired (they do **not** advance to `ready` without a KML). |
+| `stitching` | ODM task queued/running on NodeODM. `progress` advances 0→100. |
+| `clustering` | ODM finished; the asset bundle is downloading and `generate_kml` (NDVI → DBSCAN → alpha-shape → polygons) is turning the orthophoto into `clusters.kml`. Runs **automatically** when a stitch completes. Transient — advances to `ready` on success, `failed` on error. `has_stitched` flips to `true` partway through, so gate an orthophoto fetch on `has_stitched` / a non-null `artifacts.stitched_tif`, **not** on this status. |
 | `ready` | Terminal. `clusters.kml` exists — the frontend can build a spraying flight plan from it. Implies `stitched.tif` is also present. |
-| `failed` | Terminal. See `error`. |
+| `failed` | Terminal. See `error`. Reachable *after* a successful stitch too — both the asset download (`asset download failed: …`) and clustering (`clustering: stitched.tif missing`, `clustering failed: …`) fail the session. |
 | `canceled` | Terminal. Stitch was cancelled. |
 
 ### Session object
@@ -85,7 +102,7 @@ plus absolute artifact paths and a `job_id` alias):
   "image_count": 142,
   "image_glob": "",
   "backend_ref": "a1b2c3d4-...",
-  "progress": 0.37,
+  "progress": 37.0,
   "error": "",
   "has_stitched": false,
   "has_clusters": false,
@@ -107,10 +124,10 @@ plus absolute artifact paths and a `job_id` alias):
 | `area_m2` | Best-effort coverage in m², computed from the ortho once stitched (only for projected CRS; `null` otherwise). |
 | `captured_at` | Capture time, supplied by the caller (ISO 8601). |
 | `created_at` / `updated_at` | Session create / last-change time (ISO 8601). |
-| `image_count` | Number of images in `raw/`. |
+| `image_count` | Images counted into `raw/` at ingest, recounted when `StartStitching` runs. **Not a live directory count** — a session created without `source_dir` (camera driver writing `raw/` itself) reports `0` until stitching starts. |
 | `image_glob` | Glob used to select images at ingest (empty = all images). |
 | `backend_ref` | NodeODM task uuid (the reconciliation handle). |
-| `progress` | ODM progress 0.0–1.0 while `stitching`. |
+| `progress` | ODM progress as a **percentage, 0–100**, while `stitching` (NodeODM's value, passed through unscaled by PyODM). Frozen at the last polled value afterwards — not reset to 100 on completion. |
 | `error` | Failure reason, or empty. |
 | `has_stitched` / `has_clusters` | Whether `stitched.tif` / `clusters.kml` exist. |
 | `cluster_count` | Number of vegetation clusters (set by the clustering step). |
@@ -148,7 +165,8 @@ starts at `unstitched`. Does **not** start stitching.
   "source_dir": "/data/incoming/2026-06-12-am", "image_glob": "*.tif" }
 ```
 
-**Response:** session object (`status: "unstitched"`, `image_count` set).
+**Response:** session object (`status: "unstitched"`; `image_count` is set only
+when `source_dir` was supplied, otherwise `0`).
 
 ---
 
@@ -169,7 +187,9 @@ immediately with `status: "stitching"`; poll `GetJob` until terminal.
 ```
 
 **Response:** session object (`status: "stitching"`). Returns `INVALID_ARGUMENT`
-if `raw/` is empty or the session is already stitching.
+if `raw/` is empty or the session is already stitching — but `INTERNAL` if the
+`raw/` folder is *missing entirely* (e.g. deleted out-of-band from a session
+rehydrated on boot).
 
 ---
 
@@ -299,10 +319,13 @@ at `data/`) serves. Fetch them directly:
 |----------|------------------------|-----|
 | `clusters_kml` | `…/sessions/<id>/clusters.kml` | Vegetation/spray zones — load onto the map, build the flight plan. |
 | `stitched_tif` | `…/sessions/<id>/stitched.tif` | Orthophoto raster overlay. |
-| `raw_dir` | `…/sessions/<id>/raw/` | Directory listing of the source images. |
+| `raw_dir` | `…/sessions/<id>/raw/` | Directory listing of the source images (PNG on the capture path, TIFF/JPEG when ingested from a `source_dir`). |
 
 - `null` artifacts mean the file isn't produced yet (e.g. `clusters_kml` is
-  `null` until `status: "ready"`).
+  `null` until `status: "ready"`). A **non-null URL is not proof the file is
+  fetchable**: the HTTP server is best-effort — if it can't bind, gRPC still
+  serves and the URLs still appear, they just won't resolve. Handle a connection
+  failure separately from a `null` artifact.
 - The server supports **HTTP Range requests** (`206 Partial Content`) and sends
   `Access-Control-Allow-Origin: *`, so browser clients (Leaflet/georaster) can
   page through the large GeoTIFF without downloading it whole.
@@ -310,6 +333,9 @@ at `data/`) serves. Fetch them directly:
   so the URLs point at the server's reachable address rather than `localhost`.
   `FILE_SERVER_HOST` / `FILE_SERVER_PORT` set where it binds. It is
   unauthenticated — keep it on a trusted LAN.
+- The `data/` root also serves **`sd_captures/<ts>/`** — manual camera-SD dumps
+  produced by `DroneService.DownloadCaptures`. Those folders are a valid
+  `source_dir` for `CreateSession`. Same unauthenticated port.
 
 ```bash
 curl -s "http://localhost:8000/sessions/<id>/clusters.kml" -o clusters.kml
